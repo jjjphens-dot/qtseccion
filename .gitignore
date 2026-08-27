@@ -1,0 +1,21 @@
+# Qt Creator本地配置
+.qtcreator/
+*.user
+*.user.*
+
+# 构建输出
+build/
+build-claude/
+cmake-build-*/
+
+# 临时文件
+*.Debug
+*.Release
+Makefile
+*.qmake.stash
+*.o
+*.obj
+*.moc
+*.qrc
+*.log
+__pycache__/
