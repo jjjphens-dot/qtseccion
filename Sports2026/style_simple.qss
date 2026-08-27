@@ -1,0 +1,23 @@
+* {
+    font-family: "Microsoft YaHei";
+    font-size: 9pt;
+}
+
+/* === 主窗口 === 诊断：红色背景用于确认 qss 是否加载 === */
+QMainWindow {
+    background-color: #F1F5F0;
+}
+
+/* === 菜单栏 ===*/
+QMenuBar {
+    background-color: #FFFFFF;
+    border-bottom: 1px solid #E0E0E0;
+    padding: 2px 0px;
+    font-size: 10pt;
+}
+
+
+/* === 对话框 === */
+QDialog {
+    background-color: #F1F5F0;
+}
