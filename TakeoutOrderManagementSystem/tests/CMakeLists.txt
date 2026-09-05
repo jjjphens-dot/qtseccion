@@ -1,0 +1,6 @@
+qt_add_executable(tst_architecture tst_architecture.cpp)
+target_link_libraries(tst_architecture PRIVATE takeout_ui Qt6::Test)
+add_test(NAME architecture COMMAND tst_architecture)
+set_tests_properties(architecture PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+add_test(NAME shell_smoke COMMAND TakeoutOrderManagementSystem --smoke-test)
+set_tests_properties(shell_smoke PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")

@@ -1,93 +1,51 @@
-# 213253278_金俊杰
+# 外卖订单管理系统
 
+C++17 / Qt 6.11.2 Widgets / CMake。当前版本 **0.2.0 架构版（AI 辅助）**，不是完整业务系统，也不是课程纯手写版本。
 
+## 当前可运行范围
 
-## Getting started
+- 统一的实体、UUID ID、整数分金额、七个订单状态和 Result<T>/Result<void>。
+- AppContext 组合根；Repository → DataStore → Session → Service 的明确生命周期。
+- DataStore 候选快照事务，只有 Repository 保存成功后才替换内存并发出信号。
+- JsonRepository 使用 QFile/QSaveFile，仅支持合法空库读写。非空数据、损坏数据和待恢复备份均明确报错，不静默初始化或覆盖。
+- AppPaths、数据目录 QLockFile、NeedsAdminBootstrap 启动状态；不创建初始管理员或内置账号。
+- 四角色架构预览页面、只读 OrderTableModel、筛选排序 Proxy、金额和状态 Delegate。导航不执行登录，不包含演示业务数据。
+- Auth/Catalog/Order/Query/Admin/Statistics 接口与拒绝未授权调用的基础入口。未实现命令返回 NotImplemented，不能用返回成功的占位逻辑代替业务。
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+## 尚未实现
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+登录/PBKDF2/bootstrap、商家建店、菜品 CRUD、购物车命令、完整订单状态机、角色授权查询与详细 DTO、统计、全实体 JSON 编解码与不变量校验、备份恢复体验和完整业务测试。报告不在本轮范围。
 
-## Add your files
+实现顺序和关键约束见 [agent.md](agent.md)，详细规划见 [CODING_PLAN.md](CODING_PLAN.md)。计划描述最终目标，不代表所有模块完成。
 
-* [Create](https://docs.gitlab.com/user/project/repository/web_editor/#create-a-file) or [upload](https://docs.gitlab.com/user/project/repository/web_editor/#upload-a-file) files
-* [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
+## 构建与运行
 
+在 `TakeoutOrderManagementSystem` 目录执行，或在 Qt Creator 打开该目录的 CMakeLists.txt，选择 Desktop Qt 6.11.2 MinGW 64-bit Kit。
+
+```powershell
+$env:PATH = 'C:/Qt/6.11.2/mingw_64/bin;C:/Qt/Tools/mingw1310_64/bin;' + $env:PATH
+& 'C:/Qt/Tools/CMake_64/bin/cmake.exe' -S . -B build/architecture-debug -G 'MinGW Makefiles' -DCMAKE_BUILD_TYPE=Debug -DCMAKE_PREFIX_PATH=C:/Qt/6.11.2/mingw_64 -DCMAKE_CXX_COMPILER=C:/Qt/Tools/mingw1310_64/bin/g++.exe -DCMAKE_MAKE_PROGRAM=C:/Qt/Tools/mingw1310_64/bin/mingw32-make.exe -DBUILD_TESTING=ON
+& 'C:/Qt/Tools/CMake_64/bin/cmake.exe' --build build/architecture-debug --parallel 4
+& 'C:/Qt/Tools/CMake_64/bin/ctest.exe' --test-dir build/architecture-debug --output-on-failure
+& './build/architecture-debug/TakeoutOrderManagementSystem.exe'
 ```
-cd existing_repo
-git remote add origin https://gitlab.seu.edu.cn/2026qt-cll/213253278.git
-git branch -M main
-git push -uf origin main
-```
 
-## Integrate with your tools
+每个构建命令检查退出码，失败立即停止。Release 将构建目录换为 `build/architecture-release`，并使用 `-DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF`。目前验证的是 Windows/Qt 6.11.2/MinGW 13.1，未声称其他 Kit 已验证。
 
-* [Set up project integrations](https://gitlab.seu.edu.cn/2026qt-cll/213253278/-/settings/integrations)
+默认数据目录由 QStandardPaths::AppDataLocation 解析（组织名 QtTraining，应用名 TakeoutOrderManagementSystem），状态栏显示实际路径。`--data-dir <目录>` 可指定独立目录。`--smoke-test` 自动使用临时目录，短暂打开架构窗口并退出，适合冒烟测试。普通启动不会写业务文件或创建账号，只持有目录锁。
 
-## Collaborate with your team
+## 目录
 
-* [Invite team members and collaborators](https://docs.gitlab.com/user/project/members/)
-* [Create a new merge request](https://docs.gitlab.com/user/project/merge_requests/creating_merge_requests/)
-* [Automatically close issues from merge requests](https://docs.gitlab.com/user/project/issues/managing_issues/#closing-issues-automatically)
-* [Enable merge request approvals](https://docs.gitlab.com/user/project/merge_requests/approvals/)
-* [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
+- `core/`：实体、枚举、请求与 Result。
+- `data/`：持久化接口、空库 JSON 实现、DataStore 和路径。
+- `services/`：Session、权限入口与分阶段业务接口。
+- `models/`、`delegates/`：Qt MVD。
+- `app/`：依赖组装；`mainwindow.*`：窗口和角色模块导航。
+- `tests/`：架构契约测试及窗口冒烟。
+- `resources/`：可提交的 .qrc 和样式。
 
-## Test and Deploy
+## 仓库
 
-Use the built-in continuous integration in GitLab.
+开发仓库：https://github.com/jjjphens-dot/qtseccion 。原东大 GitLab remote 保留，课程提交要求仍需按教师要求执行。本次架构提交不包含工作区中已有的 Sports2026 删除操作；Git 历史可能仍含旧课程示例，当前构建入口只有 TakeoutOrderManagementSystem。
 
-* [Get started with GitLab CI/CD](https://docs.gitlab.com/ci/quick_start/)
-* [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/user/application_security/sast/)
-* [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/topics/autodevops/requirements/)
-* [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/user/clusters/agent/)
-* [Set up protected environments](https://docs.gitlab.com/ci/environments/protected_environments/)
-
-***
-
-# Editing this README
-
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
-
-## Suggestions for a good README
-
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
-
-## Name
-Choose a self-explaining name for your project.
-
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
-
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
-
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
-
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
-
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
-
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
-
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
-
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
-
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
-
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
-
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
-
-## License
-For open source projects, say how it is licensed.
-
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+源码仓库不提交 build、EXE/DLL、账号数据、环境配置或报告。可运行包通过匹配 Kit 的 windeployqt 生成；架构版不能用于处理真实订单。

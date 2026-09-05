@@ -16,6 +16,9 @@ Makefile
 *.o
 *.obj
 *.moc
-*.qrc
 *.log
 __pycache__/
+release-candidate/
+dist/
+*.env
+appdata.json*

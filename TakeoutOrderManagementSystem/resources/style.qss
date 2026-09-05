@@ -1,0 +1,11 @@
+QWidget { font-family: "Microsoft YaHei UI", "Segoe UI"; font-size: 14px; }
+QMainWindow { background: #f4f6fa; }
+QLabel#heading { font-size: 26px; font-weight: 600; padding: 12px 4px; color: #172b4d; }
+QLabel#pageTitle { font-size: 20px; font-weight: 600; padding: 12px 0; }
+QLabel#notice { background: #e8eef7; color: #233c61; padding: 12px; border-radius: 6px; }
+QListWidget { background: white; border: 1px solid #dce2ea; }
+QListWidget::item { padding: 16px; }
+QListWidget::item:selected { background: #dce9fc; color: #14396d; }
+QTableView { background: white; gridline-color: #e4e9ef; border: 1px solid #dce2ea; }
+QHeaderView::section { background: #eaf0f7; padding: 10px; border: none; }
+QLineEdit { padding: 9px; border: 1px solid #ccd5e0; border-radius: 4px; background: white; }
