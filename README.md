@@ -1,6 +1,6 @@
 # 外卖订单管理系统
 
-C++17 / Qt 6.11.2 Widgets / CMake。当前版本 **0.2.0 架构版（AI 辅助）**，不是完整业务系统，也不是课程纯手写版本。
+C++17 / Qt 6.11.2 Widgets / CMake。当前版本 **0.3.0 W02 规则版（AI 辅助）**，不是完整业务系统，也不是课程纯手写版本。
 
 ## 当前可运行范围
 
@@ -11,10 +11,12 @@ C++17 / Qt 6.11.2 Widgets / CMake。当前版本 **0.2.0 架构版（AI 辅助�
 - AppPaths、数据目录 QLockFile、NeedsAdminBootstrap 启动状态；不创建初始管理员或内置账号。
 - 四角色架构预览页面、只读 OrderTableModel、筛选排序 Proxy、金额和状态 Delegate。导航不执行登录，不包含演示业务数据。
 - Auth/Catalog/Order/Query/Admin/Statistics 接口与拒绝未授权调用的基础入口。未实现命令返回 NotImplemented，不能用返回成功的占位逻辑代替业务。
+- 集中 Validation 覆盖账号、密码、Unicode 文本、价格、数量、UUID 等边界；OrderPolicy 可按历史重放校验金额、引用、角色、七状态、支付组合、关键时间、取消/退款与骑手收入。
+- 应用级 Palette 和完整 QSS 明确指定文字、背景、表头、输入、选中、禁用、菜单和状态栏颜色，避免系统深色主题造成白字白底。
 
 ## 尚未实现
 
-登录/PBKDF2/bootstrap、商家建店、菜品 CRUD、购物车命令、完整订单状态机、角色授权查询与详细 DTO、统计、全实体 JSON 编解码与不变量校验、备份恢复体验和完整业务测试。报告不在本轮范围。
+登录/PBKDF2/bootstrap、商家建店、菜品 CRUD、购物车命令、订单状态变更命令、角色授权查询与详细 DTO、统计、全实体 JSON 编解码及校验接入、备份恢复体验和完整业务测试。报告不在本轮范围。
 
 实现顺序和关键约束见 [agent.md](agent.md)，详细规划见 [CODING_PLAN.md](CODING_PLAN.md)。计划描述最终目标，不代表所有模块完成。
 

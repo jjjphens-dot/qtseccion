@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.21)
 
-project(TakeoutOrderManagementSystem VERSION 0.2.0 LANGUAGES CXX)
+project(TakeoutOrderManagementSystem VERSION 0.3.0 LANGUAGES CXX)
 
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTOMOC ON)
@@ -15,6 +15,7 @@ include(CTest)
 
 add_library(takeout_core STATIC
     core/enums.h core/entities.h core/result.h core/requests.h
+    core/validation.h core/validation.cpp core/orderpolicy.h core/orderpolicy.cpp
     data/repository.h data/jsonrepository.h data/jsonrepository.cpp
     data/datastore.h data/datastore.cpp data/apppaths.h data/apppaths.cpp
     services/sessioncontext.h services/sessioncontext.cpp
@@ -34,16 +35,20 @@ target_link_libraries(takeout_models PUBLIC takeout_core Qt6::Gui)
 add_library(takeout_ui STATIC
     mainwindow.h mainwindow.cpp mainwindow.ui
     app/appcontext.h app/appcontext.cpp
+    app/theme.h app/theme.cpp resources/resources.qrc
     delegates/moneydelegate.h delegates/moneydelegate.cpp
     delegates/orderstatusdelegate.h delegates/orderstatusdelegate.cpp
 )
 target_link_libraries(takeout_ui PUBLIC takeout_models Qt6::Widgets)
 
-qt_add_executable(TakeoutOrderManagementSystem WIN32 main.cpp resources/resources.qrc)
+qt_add_executable(TakeoutOrderManagementSystem WIN32 main.cpp)
 target_link_libraries(TakeoutOrderManagementSystem PRIVATE takeout_ui)
 
 if(MSVC)
-    add_compile_options(/utf-8)
+    target_compile_options(takeout_core PRIVATE /utf-8)
+    target_compile_options(takeout_models PRIVATE /utf-8)
+    target_compile_options(takeout_ui PRIVATE /utf-8)
+    target_compile_options(TakeoutOrderManagementSystem PRIVATE /utf-8)
 endif()
 if(BUILD_TESTING)
     find_package(Qt6 6.11.2 REQUIRED COMPONENTS Test)

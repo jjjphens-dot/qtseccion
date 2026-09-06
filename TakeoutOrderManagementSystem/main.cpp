@@ -2,8 +2,8 @@
 
 #include <QApplication>
 #include "app/appcontext.h"
+#include "app/theme.h"
 #include <QCommandLineParser>
-#include <QFile>
 #include <QTemporaryDir>
 #include <QTimer>
 #include <QDebug>
@@ -11,9 +11,10 @@
 int main(int argc, char *argv[])
 {
     QApplication a(argc, argv);
+    takeout::applyApplicationTheme(a);
     QCoreApplication::setOrganizationName("QtTraining");
     QCoreApplication::setApplicationName("TakeoutOrderManagementSystem");
-    QCoreApplication::setApplicationVersion("0.2.0");
+    QCoreApplication::setApplicationVersion("0.3.0");
     QCommandLineParser parser;
     parser.addHelpOption();
     parser.addVersionOption();
@@ -26,8 +27,6 @@ int main(int argc, char *argv[])
         ? smokeDirectory.path() : parser.value("data-dir"));
     takeout::AppContext context(paths);
     const auto startup = context.initialize();
-    QFile stylesheet(":/style.qss");
-    if (stylesheet.open(QIODevice::ReadOnly)) a.setStyleSheet(QString::fromUtf8(stylesheet.readAll()));
     MainWindow w(context, startup);
     w.show();
     if (parser.isSet("smoke-test")) {

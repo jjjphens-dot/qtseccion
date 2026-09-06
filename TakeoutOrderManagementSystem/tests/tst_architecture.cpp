@@ -7,6 +7,7 @@
 #include <QStackedWidget>
 #include <QTableView>
 #include "app/appcontext.h"
+#include "app/theme.h"
 #include "mainwindow.h"
 #include "models/ordertablemodel.h"
 #include "models/orderfilterproxymodel.h"
@@ -191,6 +192,12 @@ private slots:
                  QStringLiteral("-￥92233720368547758.08"));
     }
     void shellNavigationDoesNotAuthenticate() {
+        applyApplicationTheme(*qApp);
+        QCOMPARE(qApp->palette().color(QPalette::WindowText), QColor("#182230"));
+        QCOMPARE(qApp->palette().color(QPalette::Base), QColor("#ffffff"));
+        QCOMPARE(qApp->palette().color(QPalette::HighlightedText), QColor("#ffffff"));
+        QVERIFY(qApp->styleSheet().contains("QTableView::item:selected"));
+        QVERIFY(qApp->styleSheet().contains("QPushButton:disabled"));
         QTemporaryDir temp;
         AppContext context(AppPaths::resolve(temp.path()));
         auto startup = context.initialize(); QVERIFY(startup.ok());

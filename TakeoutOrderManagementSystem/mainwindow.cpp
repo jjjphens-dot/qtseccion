@@ -23,7 +23,7 @@ MainWindow::MainWindow(takeout::AppContext& context,
 {
     using namespace takeout;
     ui->setupUi(this);
-    setWindowTitle(QStringLiteral("外卖订单管理系统 · 架构版 0.2.0"));
+    setWindowTitle(QStringLiteral("外卖订单管理系统 · W02 规则版 0.3.0"));
     resize(1200, 800);
     setMinimumSize(960, 640);
     auto* layout = new QVBoxLayout(ui->centralwidget);
