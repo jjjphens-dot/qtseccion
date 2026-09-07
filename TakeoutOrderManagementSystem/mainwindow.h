@@ -11,10 +11,17 @@ class QListWidget;
 class QPushButton;
 class QSplitter;
 class QStackedWidget;
+class QTableView;
+class QSpinBox;
+class QLineEdit;
+class QCheckBox;
 
 namespace takeout {
 class AppContext;
 class OrderTableModel;
+class ShopModel;
+class DishModel;
+class CartModel;
 } // namespace takeout
 
 QT_BEGIN_NAMESPACE
@@ -33,12 +40,16 @@ public:
 
 private:
   void refreshAuthenticationUi();
+  void refreshBusinessModels();
   void openLogin();
   void openRegistration();
 
   Ui::MainWindow *ui;
   takeout::AppContext &m_context;
   takeout::OrderTableModel *m_orders;
+  takeout::ShopModel *m_shops;
+  takeout::DishModel *m_dishes;
+  takeout::CartModel *m_cart;
   std::optional<takeout::StartupState> m_startupState;
   QLabel *m_stateLabel;
   QLabel *m_sessionLabel;

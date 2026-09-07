@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.21)
 
-project(TakeoutOrderManagementSystem VERSION 0.5.0 LANGUAGES CXX)
+project(TakeoutOrderManagementSystem VERSION 0.6.0 LANGUAGES CXX)
 
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTOMOC ON)
@@ -22,7 +22,7 @@ add_library(takeout_core STATIC
     data/datastore.h data/datastore.cpp data/apppaths.h data/apppaths.cpp
     services/sessioncontext.h services/sessioncontext.cpp
     services/servicebase.h services/authservice.h services/authservice.cpp
-    services/catalogservice.h services/catalogservice.cpp
+    services/catalogservice.h services/catalogservice.cpp services/orderservice.cpp
     services/orderservice.h services/orderqueryservice.h
     services/adminservice.h services/statisticsservice.h
 )
@@ -32,6 +32,9 @@ target_link_libraries(takeout_core PUBLIC Qt6::Core PRIVATE Qt6::Network)
 add_library(takeout_models STATIC
     models/ordertablemodel.h models/ordertablemodel.cpp
     models/orderfilterproxymodel.h models/orderfilterproxymodel.cpp
+    models/shopmodel.h models/shopmodel.cpp
+    models/dishmodel.h models/dishmodel.cpp
+    models/cartmodel.h models/cartmodel.cpp
 )
 target_link_libraries(takeout_models PUBLIC takeout_core Qt6::Gui)
 

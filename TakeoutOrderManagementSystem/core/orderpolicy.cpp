@@ -166,6 +166,7 @@ Result<void> validateAll(const StoreSnapshot& snapshot) {
             || value.loginName != Validation::normalizeLoginName(value.loginName)
             || !Credentials::validateStored(value).ok()
             || !value.createdAt.isValid()
+            || (value.role != Role::Customer && !value.defaultAddress.isEmpty())
             || (value.role == Role::Customer && !Validation::address(value.defaultAddress).ok()))
             return corrupt(QStringLiteral("账号字段无效"), QStringLiteral("accounts[%1]").arg(i));
         const auto login = Validation::normalizeLoginName(value.loginName);

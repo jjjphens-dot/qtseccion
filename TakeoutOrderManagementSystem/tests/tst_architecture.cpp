@@ -251,11 +251,9 @@ private slots:
             QVERIFY(!context.session().current());
         }
         const auto tables = window.findChildren<QTableView*>();
-        QCOMPARE(tables.size(), 3);
+        QCOMPARE(tables.size(), 4);
         for (auto* table : tables) {
             QCOMPARE(table->model()->rowCount(), 0);
-            QVERIFY(dynamic_cast<MoneyDelegate*>(table->itemDelegateForColumn(OrderTableModel::Total)));
-            QVERIFY(dynamic_cast<OrderStatusDelegate*>(table->itemDelegateForColumn(OrderTableModel::Status)));
         }
         navigation->setCurrentRow(0);
         QCoreApplication::processEvents();

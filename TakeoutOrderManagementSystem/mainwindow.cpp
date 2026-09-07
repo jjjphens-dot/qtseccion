@@ -1,19 +1,30 @@
 #include "mainwindow.h"
 #include "./ui_mainwindow.h"
 #include "app/appcontext.h"
+#include "core/validation.h"
 #include "delegates/moneydelegate.h"
 #include "delegates/orderstatusdelegate.h"
 #include "dialogs/logindialog.h"
 #include "dialogs/registerdialog.h"
+#include "models/cartmodel.h"
+#include "models/dishmodel.h"
 #include "models/orderfilterproxymodel.h"
 #include "models/ordertablemodel.h"
+#include "models/shopmodel.h"
+#include "services/catalogservice.h"
+#include "services/orderservice.h"
+#include <QCheckBox>
+#include <QFormLayout>
+#include <QGroupBox>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
 #include <QPushButton>
+#include <QSet>
 #include <QSizePolicy>
+#include <QSpinBox>
 #include <QSplitter>
 #include <QStackedWidget>
 #include <QStatusBar>
@@ -25,6 +36,9 @@ MainWindow::MainWindow(takeout::AppContext &context,
                        QWidget *parent)
     : QMainWindow(parent), ui(new Ui::MainWindow), m_context(context),
       m_orders(new takeout::OrderTableModel(this)),
+      m_shops(new takeout::ShopModel(this)),
+      m_dishes(new takeout::DishModel(this)),
+      m_cart(new takeout::CartModel(this)),
       m_startupState(startup.ok()
                          ? std::optional<takeout::StartupState>(startup.value())
                          : std::nullopt),
@@ -36,7 +50,7 @@ MainWindow::MainWindow(takeout::AppContext &context,
       m_loggedOutFiller(new QWidget(this)) {
   using namespace takeout;
   ui->setupUi(this);
-  setWindowTitle(QStringLiteral("外卖订单管理系统 · W04 认证版 0.5.0"));
+  setWindowTitle(QStringLiteral("外卖订单管理系统 · W05 目录购物车版 0.6.0"));
   resize(1200, 800);
   setMinimumSize(960, 640);
   auto *layout = new QVBoxLayout(ui->centralwidget);
@@ -98,32 +112,226 @@ MainWindow::MainWindow(takeout::AppContext &context,
     auto *scope = new QLabel(scopes.at(i), page);
     scope->setWordWrap(true);
     body->addWidget(scope);
-    if (roles.at(i) != Role::Admin) {
-      auto *search = new QLineEdit(page);
-      search->setPlaceholderText(
-          QStringLiteral("订单号筛选（仅影响视图，不触发保存）"));
-      body->addWidget(search);
-      auto *proxy = new OrderFilterProxyModel(page);
-      proxy->setSourceModel(m_orders);
-      connect(search, &QLineEdit::textChanged, proxy,
-              [proxy](const QString &text) {
-                OrderFilter filter;
-                filter.keyword = text;
-                proxy->setFilter(filter);
+    if (roles.at(i) == Role::Customer) {
+      auto *profile = new QGroupBox(QStringLiteral("我的资料"), page);
+      auto *form = new QFormLayout(profile);
+      auto *display = new QLineEdit(profile);
+      display->setObjectName("customerDisplayName");
+      auto *address = new QLineEdit(profile);
+      address->setObjectName("customerAddress");
+      auto *saveProfile = new QPushButton(QStringLiteral("保存资料"), profile);
+      auto *message = new QLabel(profile);
+      message->setObjectName("customerBusinessStatus");
+      form->addRow(QStringLiteral("显示名"), display);
+      form->addRow(QStringLiteral("配送地址"), address);
+      form->addRow(saveProfile, message);
+      body->addWidget(profile);
+      auto *shopTable = new QTableView(page);
+      shopTable->setObjectName("customerShopTable");
+      shopTable->setModel(m_shops);
+      shopTable->setSelectionBehavior(QAbstractItemView::SelectRows);
+      shopTable->setMaximumHeight(150);
+      shopTable->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+      body->addWidget(new QLabel(QStringLiteral("营业店铺"), page));
+      body->addWidget(shopTable);
+      auto *dishTable = new QTableView(page);
+      dishTable->setObjectName("customerDishTable");
+      dishTable->setModel(m_dishes);
+      dishTable->setSelectionBehavior(QAbstractItemView::SelectRows);
+      dishTable->setItemDelegateForColumn(DishModel::Price,
+                                          new MoneyDelegate(dishTable));
+      dishTable->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+      body->addWidget(new QLabel(QStringLiteral("可购买菜品"), page));
+      body->addWidget(dishTable, 1);
+      auto *cartControls = new QHBoxLayout;
+      auto *quantity = new QSpinBox(page);
+      quantity->setObjectName("cartQuantity");
+      quantity->setRange(1, Validation::MaxItemQuantity);
+      auto *addCart = new QPushButton(QStringLiteral("加入/更新购物车"), page);
+      auto *clearCart = new QPushButton(QStringLiteral("清空购物车"), page);
+      cartControls->addWidget(new QLabel(QStringLiteral("数量"), page));
+      cartControls->addWidget(quantity);
+      cartControls->addWidget(addCart);
+      cartControls->addWidget(clearCart);
+      cartControls->addStretch();
+      body->addLayout(cartControls);
+      auto *cartTable = new QTableView(page);
+      cartTable->setObjectName("customerCartTable");
+      cartTable->setModel(m_cart);
+      cartTable->setSelectionBehavior(QAbstractItemView::SelectRows);
+      cartTable->setItemDelegateForColumn(CartModel::UnitPrice,
+                                          new MoneyDelegate(cartTable));
+      cartTable->setItemDelegateForColumn(CartModel::LineTotal,
+                                          new MoneyDelegate(cartTable));
+      cartTable->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+      body->addWidget(new QLabel(QStringLiteral("当前购物车"), page));
+      body->addWidget(cartTable, 1);
+      auto setMessage = [message](const Result<void> &result) {
+        message->setText(result.ok() ? QStringLiteral("已保存")
+                                     : result.error().message);
+      };
+      connect(saveProfile, &QPushButton::clicked, this,
+              [this, display, address, setMessage] {
+                setMessage(m_context.catalog().updateProfile(
+                    {display->text(), address->text()}));
               });
-      auto *table = new QTableView(page);
-      table->setModel(proxy);
-      table->setItemDelegateForColumn(OrderTableModel::Total,
-                                      new MoneyDelegate(table));
-      table->setItemDelegateForColumn(OrderTableModel::Status,
-                                      new OrderStatusDelegate(table));
-      table->setSelectionBehavior(QAbstractItemView::SelectRows);
-      table->setEditTriggers(QAbstractItemView::NoEditTriggers);
-      table->setSortingEnabled(true);
-      table->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
-      body->addWidget(table, 1);
-      body->addWidget(
-          new QLabel(QStringLiteral("当前工作包尚未建立订单业务数据。"), page));
+      connect(addCart, &QPushButton::clicked, this,
+              [this, dishTable, quantity, setMessage] {
+                const auto index = dishTable->currentIndex();
+                if (!index.isValid()) {
+                  setMessage(Result<void>::failure(
+                      {ErrorCode::Validation, QStringLiteral("请先选择菜品"),
+                       "dishId"}));
+                  return;
+                }
+                const auto dishId = index.data(DishModel::IdRole).toString();
+                const auto shopId =
+                    index.data(DishModel::ShopIdRole).toString();
+                if (m_cart->rowCount() > 0 && m_cart->shopId() != shopId) {
+                  setMessage(Result<void>::failure(
+                      {ErrorCode::Conflict,
+                       QStringLiteral("购物车只能选择一家店铺"), "shopId"}));
+                  return;
+                }
+                auto items = m_cart->items();
+                bool found = false;
+                for (auto &item : items)
+                  if (item.dishId == dishId) {
+                    item.quantity = quantity->value();
+                    found = true;
+                  }
+                if (!found)
+                  items.push_back({dishId, quantity->value()});
+                setMessage(m_context.orders().updateCart({shopId, items}));
+              });
+      connect(clearCart, &QPushButton::clicked, this, [this, setMessage] {
+        if (m_cart->rowCount() == 0)
+          return;
+        setMessage(m_context.orders().updateCart({m_cart->shopId(), {}}));
+      });
+    } else if (roles.at(i) == Role::Merchant) {
+      auto *profile = new QGroupBox(QStringLiteral("商家资料"), page);
+      auto *profileForm = new QFormLayout(profile);
+      auto *display = new QLineEdit(profile);
+      display->setObjectName("merchantDisplayName");
+      auto *saveProfile = new QPushButton(QStringLiteral("保存资料"), profile);
+      profileForm->addRow(QStringLiteral("显示名"), display);
+      profileForm->addRow(saveProfile);
+      body->addWidget(profile);
+      auto *shop = new QGroupBox(QStringLiteral("店铺资料与营业状态"), page);
+      auto *shopForm = new QFormLayout(shop);
+      auto *shopName = new QLineEdit(shop);
+      shopName->setObjectName("merchantShopName");
+      auto *shopAddress = new QLineEdit(shop);
+      shopAddress->setObjectName("merchantShopAddress");
+      auto *shopDescription = new QLineEdit(shop);
+      shopDescription->setObjectName("merchantShopDescription");
+      auto *shopOpen = new QCheckBox(QStringLiteral("营业中"), shop);
+      shopOpen->setObjectName("merchantShopOpen");
+      auto *saveShop = new QPushButton(QStringLiteral("保存店铺"), shop);
+      auto *message = new QLabel(shop);
+      message->setObjectName("merchantBusinessStatus");
+      shopForm->addRow(QStringLiteral("名称"), shopName);
+      shopForm->addRow(QStringLiteral("地址"), shopAddress);
+      shopForm->addRow(QStringLiteral("简介"), shopDescription);
+      shopForm->addRow(shopOpen, saveShop);
+      shopForm->addRow(message);
+      body->addWidget(shop);
+      auto *dishFormBox = new QGroupBox(QStringLiteral("菜品管理"), page);
+      auto *dishForm = new QFormLayout(dishFormBox);
+      auto *dishName = new QLineEdit(dishFormBox);
+      dishName->setObjectName("merchantDishName");
+      auto *dishPrice = new QSpinBox(dishFormBox);
+      dishPrice->setObjectName("merchantDishPrice");
+      dishPrice->setRange(0, Validation::MaxDishPriceCents);
+      auto *dishAvailable = new QCheckBox(QStringLiteral("上架"), dishFormBox);
+      dishAvailable->setObjectName("merchantDishAvailable");
+      auto *createDish =
+          new QPushButton(QStringLiteral("新增菜品"), dishFormBox);
+      auto *updateDish =
+          new QPushButton(QStringLiteral("保存选中菜品"), dishFormBox);
+      auto *deleteDish =
+          new QPushButton(QStringLiteral("删除选中菜品"), dishFormBox);
+      dishForm->addRow(QStringLiteral("名称"), dishName);
+      dishForm->addRow(QStringLiteral("价格（分）"), dishPrice);
+      dishForm->addRow(dishAvailable);
+      auto *dishButtons = new QHBoxLayout;
+      dishButtons->addWidget(createDish);
+      dishButtons->addWidget(updateDish);
+      dishButtons->addWidget(deleteDish);
+      dishForm->addRow(dishButtons);
+      body->addWidget(dishFormBox);
+      auto *dishTable = new QTableView(page);
+      dishTable->setObjectName("merchantDishTable");
+      dishTable->setModel(m_dishes);
+      dishTable->setSelectionBehavior(QAbstractItemView::SelectRows);
+      dishTable->setItemDelegateForColumn(DishModel::Price,
+                                          new MoneyDelegate(dishTable));
+      dishTable->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+      body->addWidget(dishTable, 1);
+      auto setMessage = [message](const Result<void> &result) {
+        message->setText(result.ok() ? QStringLiteral("已保存")
+                                     : result.error().message);
+      };
+      connect(saveProfile, &QPushButton::clicked, this,
+              [this, display, setMessage] {
+                setMessage(
+                    m_context.catalog().updateProfile({display->text(), {}}));
+              });
+      connect(
+          saveShop, &QPushButton::clicked, this,
+          [this, shopName, shopAddress, shopDescription, shopOpen, setMessage] {
+            setMessage(m_context.catalog().updateShop(
+                {shopName->text(), shopDescription->text(), shopAddress->text(),
+                 shopOpen->isChecked()}));
+          });
+      connect(dishTable, &QTableView::clicked, this,
+              [dishName, dishPrice, dishAvailable](const QModelIndex &index) {
+                const auto *dish =
+                    static_cast<const DishModel *>(index.model())->rowAt(index.row());
+                if (!dish)
+                  return;
+                dishName->setText(dish->name);
+                dishPrice->setValue(int(dish->priceCents));
+                dishAvailable->setChecked(dish->isAvailable);
+              });
+      connect(createDish, &QPushButton::clicked, this,
+              [this, dishName, dishPrice, dishAvailable, setMessage] {
+                const auto result = m_context.catalog().createDish(
+                    {dishName->text(), dishPrice->value(),
+                     dishAvailable->isChecked()});
+                if (result.ok())
+                  setMessage(Result<void>::success());
+                else
+                  setMessage(Result<void>::failure(result.error()));
+              });
+      connect(
+          updateDish, &QPushButton::clicked, this,
+          [this, dishTable, dishName, dishPrice, dishAvailable, setMessage] {
+            const auto index = dishTable->currentIndex();
+            if (!index.isValid()) {
+              setMessage(Result<void>::failure({ErrorCode::Validation,
+                                                QStringLiteral("请先选择菜品"),
+                                                "dishId"}));
+              return;
+            }
+            setMessage(m_context.catalog().updateDish(
+                index.data(DishModel::IdRole).toString(),
+                {dishName->text(), dishPrice->value(),
+                 dishAvailable->isChecked()}));
+          });
+      connect(deleteDish, &QPushButton::clicked, this,
+              [this, dishTable, setMessage] {
+                const auto index = dishTable->currentIndex();
+                if (!index.isValid()) {
+                  setMessage(Result<void>::failure(
+                      {ErrorCode::Validation, QStringLiteral("请先选择菜品"),
+                       "dishId"}));
+                  return;
+                }
+                setMessage(m_context.catalog().deleteDish(
+                    index.data(DishModel::IdRole).toString()));
+              });
     } else {
       body->addWidget(new QLabel(
           QStringLiteral(
@@ -154,6 +362,7 @@ MainWindow::MainWindow(takeout::AppContext &context,
     const auto result = m_context.orderQuery().visibleOrders();
     if (result.ok())
       m_orders->replaceProjection(result.value());
+    refreshBusinessModels();
     refreshAuthenticationUi();
   };
   connect(&context.session(), &SessionContext::changed, this, reload);
@@ -162,6 +371,85 @@ MainWindow::MainWindow(takeout::AppContext &context,
   reload();
   statusBar()->showMessage(QStringLiteral("数据目录：") +
                            context.paths().directory);
+}
+
+void MainWindow::refreshBusinessModels() {
+  using namespace takeout;
+  const auto session = m_context.session().current();
+  const auto snapshot = m_context.store().snapshot();
+  m_shops->replaceProjection({});
+  m_dishes->replaceProjection({});
+  m_cart->replaceProjection({}, {});
+  if (!session)
+    return;
+  const Account *current = nullptr;
+  for (const auto &account : snapshot.accounts)
+    if (account.id == session->accountId) {
+      current = &account;
+      break;
+    }
+  if (!current || current->isDeleted)
+    return;
+  auto setText = [this](const char *name, const QString &value) {
+    if (auto *edit = m_pages->findChild<QLineEdit *>(name))
+      edit->setText(value);
+  };
+  if (session->role == Role::Customer) {
+    setText("customerDisplayName", current->displayName);
+    setText("customerAddress", current->defaultAddress);
+    QSet<Id> openShops;
+    QVector<ShopRow> shops;
+    for (const auto &shop : snapshot.shops) {
+      bool merchantActive = false;
+      for (const auto &account : snapshot.accounts)
+        if (account.id == shop.merchantId && account.role == Role::Merchant &&
+            !account.isDeleted)
+          merchantActive = true;
+      if (!shop.isOpen || !merchantActive)
+        continue;
+      openShops.insert(shop.id);
+      shops.push_back(
+          {shop.id, shop.name, shop.description, shop.address, shop.isOpen});
+    }
+    QVector<DishRow> dishes;
+    for (const auto &dish : snapshot.dishes)
+      if (openShops.contains(dish.shopId) && !dish.isDeleted &&
+          dish.isAvailable)
+        dishes.push_back({dish.id, dish.shopId, dish.name, dish.priceCents,
+                          dish.isAvailable, dish.isDeleted});
+    m_shops->replaceProjection(std::move(shops));
+    m_dishes->replaceProjection(std::move(dishes));
+    for (const auto &cart : snapshot.carts)
+      if (cart.customerId == current->id) {
+        QVector<CartRow> rows;
+        for (const auto &item : cart.items)
+          for (const auto &dish : snapshot.dishes)
+            if (dish.id == item.dishId) {
+              rows.push_back({dish.id, dish.shopId, dish.name, dish.priceCents,
+                              item.quantity, dish.priceCents * item.quantity});
+              break;
+            }
+        m_cart->replaceProjection(cart.shopId, std::move(rows));
+        break;
+      }
+  } else if (session->role == Role::Merchant) {
+    setText("merchantDisplayName", current->displayName);
+    for (const auto &shop : snapshot.shops)
+      if (shop.merchantId == current->id) {
+        setText("merchantShopName", shop.name);
+        setText("merchantShopAddress", shop.address);
+        setText("merchantShopDescription", shop.description);
+        if (auto *open = m_pages->findChild<QCheckBox *>("merchantShopOpen"))
+          open->setChecked(shop.isOpen);
+        QVector<DishRow> dishes;
+        for (const auto &dish : snapshot.dishes)
+          if (dish.shopId == shop.id)
+            dishes.push_back({dish.id, dish.shopId, dish.name, dish.priceCents,
+                              dish.isAvailable, dish.isDeleted});
+        m_dishes->replaceProjection(std::move(dishes));
+        break;
+      }
+  }
 }
 
 void MainWindow::refreshAuthenticationUi() {

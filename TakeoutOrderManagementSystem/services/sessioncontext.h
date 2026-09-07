@@ -3,6 +3,7 @@
 #include <QObject>
 namespace takeout {
 class AuthService;
+class CatalogService;
 struct Session { Id accountId; Role role; QString displayName; };
 class SessionContext final : public QObject {
     Q_OBJECT
@@ -13,8 +14,10 @@ signals:
     void changed();
 private:
     friend class AuthService;
+    friend class CatalogService;
     void clear();
     void establish(Session session);
+    void updateDisplayName(const QString &displayName);
     std::optional<Session> m_current;
 };
 } // namespace takeout
