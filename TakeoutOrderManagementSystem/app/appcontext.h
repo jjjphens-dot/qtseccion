@@ -16,6 +16,7 @@ public:
     Result<StartupState> initialize();
     const AppPaths& paths() const { return m_paths; }
     AuthService& auth() { return m_auth; }
+    CatalogService& catalog() { return m_catalog; }
     OrderQueryService& orderQuery() { return m_orderQuery; }
     SessionContext& session() { return m_session; }
     DataStore& store() { return m_store; }

@@ -26,9 +26,9 @@ Account account(const Id &id, const QString &login, const QString &name,
   v.loginName = login;
   v.displayName = name;
   v.role = role;
-  v.passwordSalt = QByteArray("salt-") + login.toUtf8();
-  v.passwordHash = QByteArray("hash-") + login.toUtf8();
-  v.passwordIterations = 210000;
+  v.passwordSalt = QByteArray(16, 's');
+  v.passwordHash = QByteArray(32, 'h');
+  v.passwordIterations = 600000;
   v.passwordAlgorithm = "PBKDF2-HMAC-SHA256";
   if (role == Role::Customer)
     v.defaultAddress = "用户地址";
@@ -247,6 +247,13 @@ private slots:
     QVERIFY(!JsonCodec::decode(root).ok());
     root = JsonCodec::encode(completeSnapshot());
     root["savedAt"] = "2026-09-01T18:00:20.000+08:00";
+    QVERIFY(!JsonCodec::decode(root).ok());
+    root = JsonCodec::encode(completeSnapshot());
+    accounts = root["accounts"].toArray();
+    a = accounts[0].toObject();
+    a["passwordIterations"] = 1;
+    accounts[0] = a;
+    root["accounts"] = accounts;
     QVERIFY(!JsonCodec::decode(root).ok());
   }
   void unsupportedVersionIsDistinct() {

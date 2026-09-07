@@ -1,4 +1,5 @@
 #include "orderpolicy.h"
+#include "credentials.h"
 #include "validation.h"
 #include <QHash>
 #include <QSet>
@@ -162,6 +163,8 @@ Result<void> validateAll(const StoreSnapshot& snapshot) {
         const auto& value = snapshot.accounts.at(i);
         if (!addId(value.id, QStringLiteral("accounts[%1].id").arg(i)).ok()
             || !Validation::loginName(value.loginName).ok() || !Validation::displayName(value.displayName).ok()
+            || value.loginName != Validation::normalizeLoginName(value.loginName)
+            || !Credentials::validateStored(value).ok()
             || !value.createdAt.isValid()
             || (value.role == Role::Customer && !Validation::address(value.defaultAddress).ok()))
             return corrupt(QStringLiteral("账号字段无效"), QStringLiteral("accounts[%1]").arg(i));

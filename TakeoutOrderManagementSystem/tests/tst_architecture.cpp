@@ -3,7 +3,11 @@
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QFile>
+#include <QComboBox>
+#include <QLineEdit>
 #include <QListWidget>
+#include <QPushButton>
+#include <QSplitter>
 #include <QStackedWidget>
 #include <QTableView>
 #include "app/appcontext.h"
@@ -13,6 +17,8 @@
 #include "models/orderfilterproxymodel.h"
 #include "delegates/moneydelegate.h"
 #include "delegates/orderstatusdelegate.h"
+#include "dialogs/logindialog.h"
+#include "dialogs/registerdialog.h"
 #include <limits>
 
 using namespace takeout;
@@ -93,13 +99,14 @@ private slots:
         SessionContext session;
         AuthService auth(store, session);
         const auto bootstrap = auth.bootstrapAdmin({"admin", "Demo1234!", "Administrator"});
-        QVERIFY(!bootstrap.ok()); QCOMPARE(bootstrap.error().code, ErrorCode::NotImplemented);
-        QVERIFY(store.snapshot().accounts.isEmpty());
+        QVERIFY(bootstrap.ok()); QCOMPARE(repository.writes, 1);
+        QCOMPARE(store.snapshot().accounts.size(), 1); QVERIFY(!session.current());
         RegisterRequest registration; registration.role = Role::Admin;
         const auto rejected = auth.registerAccount(registration);
         QVERIFY(!rejected.ok()); QCOMPARE(rejected.error().code, ErrorCode::Forbidden);
-        QVERIFY(!auth.login("admin", "Demo1234!", Role::Admin).ok());
-        QVERIFY(!session.current());
+        QVERIFY(auth.login("admin", "Demo1234!", Role::Admin).ok());
+        QVERIFY(session.current()); QCOMPARE(session.current()->role, Role::Admin);
+        QVERIFY(auth.logout().ok()); QVERIFY(!session.current());
     }
     void existingAdminRejectsBootstrap() {
         MemoryRepository repository;
@@ -148,6 +155,8 @@ private slots:
         StoreSnapshot nonempty = empty; nonempty.revision = 1;
         Account admin; admin.id="11111111-1111-4111-8111-111111111111";
         admin.loginName="admin"; admin.displayName="管理员"; admin.role=Role::Admin;
+        admin.passwordSalt=QByteArray(16,'s'); admin.passwordHash=QByteArray(32,'h');
+        admin.passwordIterations=600000; admin.passwordAlgorithm="PBKDF2-HMAC-SHA256";
         admin.createdAt=empty.savedAt; nonempty.accounts.push_back(admin);
         auto save = repository.save(nonempty);
         QVERIFY(save.ok()); QVERIFY(repository.load().ok());
@@ -194,6 +203,29 @@ private slots:
         QCOMPARE(delegate.displayText(QVariant::fromValue(std::numeric_limits<qint64>::min()), QLocale()),
                  QStringLiteral("-￥92233720368547758.08"));
     }
+    void authenticationDialogsExposeOnlyLegalRegistrationRoles() {
+        LoginDialog login;
+        auto* loginRole=login.findChild<QComboBox*>("loginRole");
+        auto* password=login.findChild<QLineEdit*>("loginPassword");
+        auto* registration=login.findChild<QPushButton*>("openRegistration");
+        QVERIFY(loginRole); QVERIFY(password); QVERIFY(registration);
+        QCOMPARE(password->echoMode(),QLineEdit::Password);
+        QCOMPARE(loginRole->count(),4);
+        loginRole->setCurrentIndex(3); QVERIFY(!registration->isEnabled());
+        RegisterDialog normal(RegisterDialog::Mode::RegisterAccount);
+        auto* role=normal.findChild<QComboBox*>("registrationRole");
+        auto* address=normal.findChild<QLineEdit*>("registrationAddress");
+        auto* shopName=normal.findChild<QLineEdit*>("registrationShopName");
+        QVERIFY(role); QVERIFY(address); QVERIFY(shopName); QCOMPARE(role->count(),3);
+        role->setCurrentIndex(1); QVERIFY(!address->isHidden()); QVERIFY(!shopName->isHidden());
+        role->setCurrentIndex(2); QVERIFY(address->isHidden()); QVERIFY(shopName->isHidden());
+        for(int i=0;i<role->count();++i) QVERIFY(Role(role->itemData(i).toInt())!=Role::Admin);
+        RegisterDialog bootstrap(RegisterDialog::Mode::BootstrapAdmin);
+        auto* bootstrapRole=bootstrap.findChild<QComboBox*>("registrationRole");
+        QVERIFY(bootstrapRole); QCOMPARE(bootstrapRole->count(),1);
+        QCOMPARE(Role(bootstrapRole->currentData().toInt()),Role::Admin);
+        QVERIFY(!bootstrapRole->isEnabled());
+    }
     void shellNavigationDoesNotAuthenticate() {
         applyApplicationTheme(*qApp);
         QCOMPARE(qApp->palette().color(QPalette::WindowText), QColor("#182230"));
@@ -205,6 +237,12 @@ private slots:
         AppContext context(AppPaths::resolve(temp.path()));
         auto startup = context.initialize(); QVERIFY(startup.ok());
         MainWindow window(context, startup); window.show();
+        auto* loginButton=window.findChild<QPushButton*>("loginButton");
+        auto* registerButton=window.findChild<QPushButton*>("registerButton");
+        auto* roleContent=window.findChild<QSplitter*>("roleContent");
+        QVERIFY(loginButton); QVERIFY(registerButton); QVERIFY(roleContent);
+        QVERIFY(!loginButton->isEnabled()); QVERIFY(registerButton->isEnabled());
+        QVERIFY(roleContent->isHidden());
         auto* navigation = window.findChild<QListWidget*>("roleNavigation");
         auto* pages = window.findChild<QStackedWidget*>("rolePages");
         QVERIFY(navigation); QVERIFY(pages); QCOMPARE(pages->count(), 4);

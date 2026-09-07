@@ -14,6 +14,8 @@ const Id orderId = "77777777-7777-4777-8777-777777777777";
 
 Account account(const Id& id, const QString& login, const QString& name, Role role) {
     Account value; value.id=id; value.loginName=login; value.displayName=name; value.role=role;
+    value.passwordSalt=QByteArray(16,'s'); value.passwordHash=QByteArray(32,'h');
+    value.passwordIterations=600000; value.passwordAlgorithm="PBKDF2-HMAC-SHA256";
     if (role == Role::Customer) value.defaultAddress = "用户地址";
     value.createdAt=QDateTime::fromString("2026-09-01T00:00:00.000Z", Qt::ISODateWithMs);
     return value;

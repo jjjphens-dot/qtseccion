@@ -14,7 +14,7 @@ int main(int argc, char *argv[])
     takeout::applyApplicationTheme(a);
     QCoreApplication::setOrganizationName("QtTraining");
     QCoreApplication::setApplicationName("TakeoutOrderManagementSystem");
-    QCoreApplication::setApplicationVersion("0.4.0");
+    QCoreApplication::setApplicationVersion("0.5.0");
     QCommandLineParser parser;
     parser.addHelpOption();
     parser.addVersionOption();

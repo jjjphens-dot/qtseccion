@@ -3,6 +3,7 @@ QLabel { color: #182230; background: transparent; }
 QLabel#heading { font-size: 26px; font-weight: 600; padding: 12px 4px; color: #172b4d; }
 QLabel#pageTitle { font-size: 20px; font-weight: 600; padding: 12px 0; color: #172b4d; }
 QLabel#notice { background: #e8eef7; color: #233c61; padding: 12px; border-radius: 6px; }
+QLabel#formError { color: #9f1d20; background: #fdebec; padding: 8px; border-radius: 4px; }
 QListWidget, QTableView, QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox, QDateEdit, QDateTimeEdit, QTextEdit, QPlainTextEdit {
     color: #182230; background-color: #ffffff; border: 1px solid #b8c2ce; border-radius: 4px;
     selection-background-color: #1769aa; selection-color: #ffffff;
