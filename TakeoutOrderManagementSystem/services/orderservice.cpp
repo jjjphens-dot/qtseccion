@@ -253,19 +253,26 @@ Result<void> OrderService::execute(const Id &orderId, OrderAction action,
     order->paidAt = now;
     break;
   }
-  case OrderAction::Cancel:
+  case OrderAction::Cancel: {
     if (session->role != Role::Customer || order->customerId != session->accountId)
       return Result<void>::failure(wrongOwner());
     if (order->paymentStatus != PaymentStatus::Unpaid)
       return Result<void>::failure(invalidTransition(QStringLiteral("已支付订单不能由顾客取消")));
+    if (!Validation::reason(reason, false).ok())
+      return Result<void>::failure(
+          {ErrorCode::Validation, QStringLiteral("取消原因无效"), "reason"});
+    const auto normalizedReason =
+        reason.normalized(QString::NormalizationForm_C).trimmed();
     {
-      const auto moved = append(OrderAction::Cancel, OrderStatus::Cancelled);
+      const auto moved = append(OrderAction::Cancel, OrderStatus::Cancelled,
+                                normalizedReason);
       if (!moved.ok())
         return moved;
     }
     order->cancelledAt = now;
-    order->cancelReason = reason.trimmed();
+    order->cancelReason = normalizedReason;
     break;
+  }
   case OrderAction::Accept:
     if (session->role != Role::Merchant || !merchantOwns(candidate, *order, session->accountId))
       return Result<void>::failure(wrongOwner());
@@ -337,7 +344,13 @@ Result<void> OrderService::execute(const Id &orderId, OrderAction action,
     order->riderIncomeCents = order->deliveryFeeCents;
     break;
   case OrderAction::CreateOrder:
-    break;
+    return Result<void>::failure(
+        {ErrorCode::InvalidTransition, QStringLiteral("请使用 createOrder"),
+         "action"});
+  default:
+    return Result<void>::failure(
+        {ErrorCode::InvalidTransition, QStringLiteral("未知订单动作"),
+         "action"});
   }
   return commit(std::move(candidate));
 }

@@ -194,6 +194,9 @@ private slots:
         OrderFilter filter; filter.status = OrderStatus::Completed; proxy.setFilter(filter);
         QCOMPARE(proxy.rowCount(), 1);
         QCOMPARE(proxy.mapToSource(proxy.index(0, 0)).data(OrderTableModel::IdRole).toString(), QString("id-100"));
+        filter = {}; filter.keyword = "B"; proxy.setFilter(filter);
+        QCOMPARE(proxy.rowCount(), 1);
+        QCOMPARE(proxy.index(0, 0).data(OrderTableModel::IdRole).toString(), QString("id-2"));
         filter = {}; filter.until = now; proxy.setFilter(filter); QCOMPARE(proxy.rowCount(), 0);
         model.replaceProjection({}); QCOMPARE(model.rowCount(), 0);
     }

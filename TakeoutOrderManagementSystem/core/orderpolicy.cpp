@@ -83,7 +83,7 @@ Result<void> validate(const Order& order, const StoreSnapshot& snapshot) {
     if (order.history.isEmpty()) return corrupt(QStringLiteral("订单历史为空"), QStringLiteral("history"));
 
     const auto& first = order.history.first();
-    if (first.action != OrderAction::CreateOrder || first.fromStatus || first.toStatus != OrderStatus::PendingPayment
+    if (!first.at.isValid() || first.action != OrderAction::CreateOrder || first.fromStatus || first.toStatus != OrderStatus::PendingPayment
         || first.actorId != order.customerId || first.at != order.createdAt)
         return corrupt(QStringLiteral("首条历史不是合法创建记录"), QStringLiteral("history[0]"));
     OrderStatus state = OrderStatus::PendingPayment;
@@ -95,7 +95,7 @@ Result<void> validate(const Order& order, const StoreSnapshot& snapshot) {
     QDateTime previous = first.at;
     for (qsizetype i = 1; i < order.history.size(); ++i) {
         const auto& entry = order.history.at(i);
-        if (!entry.fromStatus || *entry.fromStatus != state || entry.at < previous || !canTransition(state, entry.action))
+        if (!entry.at.isValid() || !entry.fromStatus || *entry.fromStatus != state || entry.at < previous || !canTransition(state, entry.action))
             return corrupt(QStringLiteral("历史状态不连续或动作非法"), QStringLiteral("history[%1]").arg(i));
         const auto customerActor = entry.actorId == order.customerId && account(snapshot, entry.actorId, Role::Customer);
         const auto merchantActor = entry.actorId == shop->merchantId && account(snapshot, entry.actorId, Role::Merchant);
@@ -106,7 +106,7 @@ Result<void> validate(const Order& order, const StoreSnapshot& snapshot) {
             if (!customerActor || entry.toStatus != OrderStatus::PendingAcceptance) return corrupt("支付历史操作者或状态无效", QStringLiteral("history[%1]").arg(i));
             state = entry.toStatus; payment = PaymentStatus::Paid; paidAt = entry.at; break;
         case OrderAction::Cancel:
-            if (!customerActor || entry.toStatus != OrderStatus::Cancelled) return corrupt("取消历史操作者或状态无效", QStringLiteral("history[%1]").arg(i));
+            if (!customerActor || entry.toStatus != OrderStatus::Cancelled || !Validation::reason(entry.reason, false).ok()) return corrupt("取消历史操作者、状态或原因无效", QStringLiteral("history[%1]").arg(i));
             state = entry.toStatus; cancelledAt = entry.at; cancelReason = entry.reason; break;
         case OrderAction::Accept:
             if (!merchantActor || entry.toStatus != OrderStatus::Preparing) return corrupt("接单历史操作者或状态无效", QStringLiteral("history[%1]").arg(i));

@@ -66,15 +66,46 @@ private slots:
       const auto customerDetail = query.orderDetail(completedId);
       QVERIFY(customerDetail.ok());
       QCOMPARE(customerDetail.value().address, QString("收货地址"));
+      const auto invalidActionRevision = store.snapshot().revision;
+      QVERIFY(!orders.execute(completedId, static_cast<OrderAction>(99)).ok());
+      QCOMPARE(store.snapshot().revision, invalidActionRevision);
+      QVERIFY(!orders.execute(completedId, OrderAction::CreateOrder).ok());
+      QCOMPARE(store.snapshot().revision, invalidActionRevision);
+      MUST(auth.logout());
+      MUST(auth.login("merchant", "Merchant!1", Role::Merchant));
+      QVERIFY(query.visibleOrders().value().isEmpty());
+      QVERIFY(!query.orderDetail(completedId).ok());
+      MUST(auth.logout());
+      MUST(auth.login("rider", "Rider!123", Role::Rider));
+      QVERIFY(query.visibleOrders().value().isEmpty());
+      QVERIFY(!query.orderDetail(completedId).ok());
+      MUST(auth.logout());
+      MUST(auth.login("customer", "Customer!1", Role::Customer));
       MUST(orders.execute(completedId, OrderAction::Pay));
       QCOMPARE(store.snapshot().orders.first().status,
                OrderStatus::PendingAcceptance);
       QVERIFY(!orders.execute(completedId, OrderAction::Pay).ok());
       MUST(auth.logout());
 
+      MUST(auth.login("rider", "Rider!123", Role::Rider));
+      QCOMPARE(query.visibleOrders().value().size(), 1);
+      const auto pendingDetail = query.orderDetail(completedId);
+      QVERIFY(pendingDetail.ok());
+      QVERIFY(pendingDetail.value().customerName.isEmpty());
+      QVERIFY(pendingDetail.value().address.isEmpty());
+      QVERIFY(pendingDetail.value().customerId.isEmpty());
+      QVERIFY(pendingDetail.value().history.isEmpty());
+      MUST(auth.logout());
       MUST(auth.login("merchant", "Merchant!1", Role::Merchant));
       QCOMPARE(query.visibleOrders().value().size(), 1);
       MUST(orders.execute(completedId, OrderAction::Accept));
+      MUST(auth.logout());
+      MUST(auth.login("rider", "Rider!123", Role::Rider));
+      QCOMPARE(query.visibleOrders().value().size(), 1);
+      QVERIFY(query.orderDetail(completedId).ok());
+      QVERIFY(query.orderDetail(completedId).value().history.isEmpty());
+      MUST(auth.logout());
+      MUST(auth.login("merchant", "Merchant!1", Role::Merchant));
       MUST(orders.execute(completedId, OrderAction::MarkReady));
       QVERIFY(!orders.execute(completedId, OrderAction::Reject, "缺货").ok());
       MUST(auth.logout());
@@ -91,6 +122,7 @@ private slots:
       MUST(orders.execute(completedId, OrderAction::Claim));
       const auto afterClaim = query.orderDetail(completedId);
       QVERIFY(afterClaim.ok());
+      QCOMPARE(afterClaim.value().customerName, QString("顾客甲"));
       QCOMPARE(afterClaim.value().address, QString("收货地址"));
       MUST(orders.execute(completedId, OrderAction::MarkDelivered));
       QVERIFY(!orders.execute(completedId, OrderAction::MarkDelivered).ok());
@@ -104,10 +136,25 @@ private slots:
 
       MUST(orders.updateCart({shopId, {{dishId, 1}}}));
       cancelledId = MUST_ID(orders.createOrder({"顾客甲", "临时地址"}));
-      MUST(orders.execute(cancelledId, OrderAction::Cancel));
+      MUST(orders.execute(cancelledId, OrderAction::Cancel, "  客户取消  "));
       QCOMPARE(store.snapshot().orders.size(), 2);
       QCOMPARE(store.snapshot().orders.last().status, OrderStatus::Cancelled);
+      QCOMPARE(store.snapshot().orders.last().cancelReason, QString("客户取消"));
+      QCOMPARE(store.snapshot().orders.last().history.last().reason,
+               QString("客户取消"));
       QVERIFY(OrderPolicy::validateAll(store.snapshot()).ok());
+      OrderFilter invalid;
+      invalid.from = QDateTime();
+      QVERIFY(!query.visibleOrders(invalid).ok());
+      invalid = {};
+      invalid.until = QDateTime();
+      QVERIFY(!query.visibleOrders(invalid).ok());
+      invalid = {};
+      invalid.from = QDateTime::currentDateTimeUtc();
+      invalid.until = invalid.from;
+      const auto invalidRange = query.visibleOrders(invalid);
+      QVERIFY(!invalidRange.ok());
+      QCOMPARE(invalidRange.error().code, ErrorCode::Validation);
       QCOMPARE(query.visibleOrders().value().size(), 2);
     }
 

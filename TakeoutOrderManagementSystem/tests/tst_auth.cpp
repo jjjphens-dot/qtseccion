@@ -182,6 +182,20 @@ private slots:
     QVERIFY(auth.login("admin", "Admin!234", Role::Admin).ok());
     QCOMPARE(session.current()->displayName, QString("管理员"));
   }
+
+  void invalidStoredCredentialSaltIsRejected() {
+    Account account;
+    account.passwordAlgorithm = QString::fromLatin1(Credentials::Algorithm);
+    account.passwordIterations = Credentials::Iterations;
+    account.passwordSalt = QByteArray(Credentials::SaltBytes - 1, 's');
+    account.passwordHash = QByteArray(Credentials::HashBytes, 'h');
+    QVERIFY(!Credentials::validateStored(account).ok());
+    account.passwordSalt = QByteArray(Credentials::SaltBytes + 1, 's');
+    QVERIFY(!Credentials::validateStored(account).ok());
+    account.passwordSalt = QByteArray(Credentials::SaltBytes, 's');
+    account.passwordHash = QByteArray(Credentials::HashBytes - 1, 'h');
+    QVERIFY(!Credentials::validateStored(account).ok());
+  }
 };
 QTEST_APPLESS_MAIN(AuthTest)
 #include "tst_auth.moc"

@@ -76,7 +76,7 @@ Result<Account> createAccount(const StoreSnapshot &snapshot,
 Result<void> validateStored(const Account &account) {
   if (account.passwordAlgorithm != QLatin1String(Algorithm) ||
       account.passwordIterations != Iterations ||
-      account.passwordSalt.size() < SaltBytes ||
+      account.passwordSalt.size() != SaltBytes ||
       account.passwordHash.size() != HashBytes)
     return Result<void>::failure({ErrorCode::CorruptData,
                                   QStringLiteral("账号密码凭据无效"),

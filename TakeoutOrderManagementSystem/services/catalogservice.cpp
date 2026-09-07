@@ -46,6 +46,17 @@ bool activeDishNameTaken(const QVector<Dish> &dishes, const Id &shopId,
       return true;
   return false;
 }
+
+void removeDishFromCarts(StoreSnapshot &snapshot, const Id &dishId) {
+  for (qsizetype i = snapshot.carts.size() - 1; i >= 0; --i) {
+    auto &cart = snapshot.carts[i];
+    for (qsizetype j = cart.items.size() - 1; j >= 0; --j)
+      if (cart.items.at(j).dishId == dishId)
+        cart.items.removeAt(j);
+    if (cart.items.isEmpty())
+      snapshot.carts.removeAt(i);
+  }
+}
 } // namespace
 
 Result<void> CatalogService::createMerchantWithShop(
@@ -209,6 +220,8 @@ Result<void> CatalogService::updateDish(const Id &dishId,
   dish->name = normalized(changes.name);
   dish->priceCents = changes.priceCents;
   dish->isAvailable = changes.isAvailable;
+  if (!dish->isAvailable)
+    removeDishFromCarts(candidate, dish->id);
   dish->updatedAt = QDateTime::currentDateTimeUtc();
   return commit(std::move(candidate));
 }
@@ -230,6 +243,7 @@ Result<void> CatalogService::deleteDish(const Id &dishId) {
                                   QStringLiteral("菜品已经删除"), "dishId"});
   dish->isDeleted = true;
   dish->isAvailable = false;
+  removeDishFromCarts(candidate, dish->id);
   dish->updatedAt = QDateTime::currentDateTimeUtc();
   return commit(std::move(candidate));
 }

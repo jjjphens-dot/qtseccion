@@ -23,11 +23,31 @@ bool visibleTo(const Order &order, const StoreSnapshot &snapshot,
     return order.customerId == session.accountId;
   const auto *shop = shopById(snapshot, order.shopId);
   if (session.role == Role::Merchant)
-    return shop && shop->merchantId == session.accountId;
-  if (session.role == Role::Rider)
-    return order.status == OrderStatus::ReadyForDelivery ||
+    return order.paymentStatus != PaymentStatus::Unpaid && shop &&
+           shop->merchantId == session.accountId;
+  if (session.role == Role::Rider) {
+    if (order.paymentStatus == PaymentStatus::Unpaid)
+      return false;
+    return order.status == OrderStatus::PendingAcceptance ||
+           order.status == OrderStatus::Preparing ||
+           order.status == OrderStatus::ReadyForDelivery ||
            (order.riderId && *order.riderId == session.accountId);
+  }
   return false;
+}
+
+Result<void> validateFilter(const OrderFilter &filter) {
+  if (filter.from && !filter.from->isValid())
+    return Result<void>::failure({ErrorCode::Validation,
+                                  QStringLiteral("起始日期无效"), "from"});
+  if (filter.until && !filter.until->isValid())
+    return Result<void>::failure({ErrorCode::Validation,
+                                  QStringLiteral("结束日期无效"), "until"});
+  if (filter.from && filter.until && *filter.from >= *filter.until)
+    return Result<void>::failure({ErrorCode::Validation,
+                                  QStringLiteral("起始日期必须早于结束日期"),
+                                  "from"});
+  return Result<void>::success();
 }
 
 bool matches(const Order &order, const OrderFilter &filter) {
@@ -90,6 +110,9 @@ Result<QVector<OrderRow>> OrderQueryService::visibleOrders(
       {Role::Customer, Role::Merchant, Role::Rider, Role::Admin});
   if (!permission.ok())
     return Result<QVector<OrderRow>>::failure(permission.error());
+  const auto checked = validateFilter(filter);
+  if (!checked.ok())
+    return Result<QVector<OrderRow>>::failure(checked.error());
   const auto session = m_session.current();
   const auto snapshot = m_store.snapshot();
   QVector<OrderRow> rows;

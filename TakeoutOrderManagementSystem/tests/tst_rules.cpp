@@ -92,6 +92,7 @@ private slots:
         order.history[4].actorId=customerId; snapshot.orders={order}; QVERIFY(!OrderPolicy::validateAll(snapshot).ok());
         order=completedOrder(); order.history[5].toStatus=OrderStatus::Completed; snapshot.orders={order}; QVERIFY(!OrderPolicy::validateAll(snapshot).ok());
         order=completedOrder(); order.history[3].at=order.history[2].at.addSecs(-1); snapshot.orders={order}; QVERIFY(!OrderPolicy::validateAll(snapshot).ok());
+        order=completedOrder(); order.history[2].at=QDateTime(); snapshot.orders={order}; QVERIFY(!OrderPolicy::validateAll(snapshot).ok());
         order=completedOrder(); order.history.removeAt(3); snapshot.orders={order}; QVERIFY(!OrderPolicy::validateAll(snapshot).ok());
     }
     void cancellationsFollowTwoLegalPaths() {

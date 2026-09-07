@@ -122,7 +122,50 @@ private slots:
     QCOMPARE(cart.items().first().quantity, 2);
     cart.replaceProjection({}, {});
     QCOMPARE(cart.rowCount(), 0);
-}
+  }
+
+  void dishRemovalClearsCartsInSameValidTransaction() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    JsonRepository repository(directory.filePath("appdata.json"));
+    DataStore store(repository);
+    SessionContext session;
+    AuthService auth(store, session);
+    CatalogService catalog(store, session);
+    OrderService orders(store, session);
+    QVERIFY(store.initialize().ok());
+    QVERIFY(auth.bootstrapAdmin({"admin", "Admin!234", "管理员"}).ok());
+    QVERIFY(catalog.createMerchantWithShop(
+                          {"merchant", "Merchant!1", "商家", "店铺", {}, "店址"})
+                .ok());
+    QVERIFY(auth.login("merchant", "Merchant!1", Role::Merchant).ok());
+    QVERIFY(catalog.updateShop({"店铺", {}, "店址", true}).ok());
+    const auto dishId = catalog.createDish({"菜", 1200, true});
+    QVERIFY(dishId.ok());
+    const auto shopId = store.snapshot().shops.first().id;
+    QVERIFY(auth.logout().ok());
+    QVERIFY(auth.registerAccount(
+                          {"customer", "Customer!1", "顾客", "地址", Role::Customer})
+                .ok());
+    QVERIFY(auth.login("customer", "Customer!1", Role::Customer).ok());
+    QVERIFY(orders.updateCart({shopId, {{dishId.value(), 1}}}).ok());
+    QCOMPARE(store.snapshot().carts.size(), 1);
+    QVERIFY(auth.logout().ok());
+    QVERIFY(auth.login("merchant", "Merchant!1", Role::Merchant).ok());
+    QVERIFY(catalog.updateDish(dishId.value(), {"菜", 1200, false}).ok());
+    QCOMPARE(store.snapshot().carts.size(), 0);
+    QVERIFY(OrderPolicy::validateAll(store.snapshot()).ok());
+
+    QVERIFY(catalog.updateDish(dishId.value(), {"菜", 1200, true}).ok());
+    QVERIFY(auth.logout().ok());
+    QVERIFY(auth.login("customer", "Customer!1", Role::Customer).ok());
+    QVERIFY(orders.updateCart({shopId, {{dishId.value(), 1}}}).ok());
+    QVERIFY(auth.logout().ok());
+    QVERIFY(auth.login("merchant", "Merchant!1", Role::Merchant).ok());
+    QVERIFY(catalog.deleteDish(dishId.value()).ok());
+    QCOMPARE(store.snapshot().carts.size(), 0);
+    QVERIFY(OrderPolicy::validateAll(store.snapshot()).ok());
+  }
 };
 
 QTEST_APPLESS_MAIN(CatalogTest)
