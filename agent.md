@@ -2,7 +2,7 @@
 
 ## 本轮授权与版本性质
 
-用户先要求依据 Coding Plan 实现程序架构；本轮又要求修复白字白底并继续按计划开发。当前 0.3.0 是 AI 辅助 W02 规则版；不是完整 P0，也不能标记为学生纯手写版本。报告仍不处理。学生手写版、学号 D01 仍需本人核实；本轮只向 GitHub 新分支推送，不操作 GitLab。
+用户先要求依据 Coding Plan 实现程序架构，随后确认 W02 人工检验通过并授权继续开发。当前 0.4.0 是 AI 辅助 W03 持久化基础版；不是完整 P0，也不能标记为学生纯手写版本。报告仍不处理。学生手写版、学号 D01 仍需本人核实；只向 GitHub 功能分支推送，不操作 GitLab。
 
 阅读顺序：本文件 → README.md → CODING_PLAN.md → 当前源码。仓库内计划为工作区根目录计划的同步副本；开始下轮修改时核对是否出现更新，避免不同副本各自演进。计划中的工作包完成条件不能当作当前实现事实。
 
@@ -14,8 +14,9 @@
 - `core/entities.h` 是值对象模型，使用完整 UUID 字符串、qint64 分、订单快照、可空 claimedAt 等字段；保留完整7状态。`validation.*` 集中实现输入边界，`orderpolicy.*` 实现状态迁移许可、金额/关系/唯一性以及按 history 重放的确定性快照校验。
 - `Result<T>` 使用值/错误二择一，`Result<void>` 支持无值结果，均 nodiscard；失败含 code/message/field。只有先检查 ok 才能读取 value/error。
 - DataStore 不暴露可修改集合；snapshot() 返回值副本。commitCandidate 仅通过 ServiceBase 的保护入口访问；先调用 Repository 保存，成功才替换快照、递增 revision 并发 committed。拒绝过期 revision；GUI 线程执行提交与 Model 刷新。
-- JsonRepository **只支持 schemaVersion=1 的合法空结构**，100 MiB 上限。非空业务集合返回 NotImplemented；坏文件/未知字段拒绝；主文件缺失但有备份不当新库。save 先检查原文件可读且受支持，再用 QSaveFile 原子替换，direct-write fallback 关闭。
-- 当前空库启动不保存数据、不创建管理员。NeedsAdminBootstrap 是数据层启动结果，不是认证。Ready 识别契约通过注入测试 Repository 验证；生产 JSON 非空读取仍未完成。
+- `JsonCodec` 完整覆盖 Account/Shop/Dish/Cart/Order/history 及所有可空字段。schemaVersion=1 采用严格字段集、稳定英文枚举、标准 Base64 和规范 UTC ISO 8601 毫秒时间；未知/缺失字段、错误类型、非精确整数、非规范时间均整库拒绝。
+- JsonRepository 限制 100 MiB，加载与保存均调用 OrderPolicy 全局校验。QSaveFile 禁用 direct-write fallback；已有主文件保存前必须有效，先将上一快照原子写入 `.bak`，再替换主文件。主文件缺失/损坏而备份有效时返回 RecoveryAvailable，不自动覆盖；`loadBackup()` 只返回通过完整校验的备份供 W08 恢复流程使用。
+- 当前空库启动不保存数据、不创建管理员。NeedsAdminBootstrap 是数据层启动结果，不是认证。非空 JSON 已可读取；DataStore 仍要求其至少含一个有效 Admin，否则启动失败。
 - AuthService 是唯一可建立/清除 Session 的类；当前 login/bootstrap 未实现，绝不建立伪登录。普通注册入口拒绝 Admin/Merchant，商家必须走 CatalogService 原子建店入口。
 - ServiceBase 校验初始化、Session、存储账号存在/未删除/角色匹配；所有后续业务入口需再校验实体归属与状态。当前命令是显式 Forbidden/NotImplemented，不产生业务数据。
 - OrderTableModel 只接收 OrderRow DTO 投影；OrderQueryService 尚未实现，当前页面永远为空。Proxy 用真实金额/时间排序、完整 IdRole 定位，半开日期范围筛选。MoneyDelegate/OrderStatusDelegate 已安装在表格。
@@ -30,15 +31,15 @@
 4. Cancelled 只允许 Unpaid/Refunded；PendingPayment 只允许 Unpaid；其余5状态 Paid。完整时间/history规则按计划第5节，后续实现不能只校验本轮已有的组合函数。
 5. 价格与总额是整数分，历史快照不受当前商品价格、地址或店铺名称变化影响；逻辑删除保留引用。
 6. 数据库/Web服务器/真实支付/联网业务不在计划中。QSaveFile、QLockFile、单JSON不替换。
-7. 本轮只是架构搭建，不宣称 W02/W03/P0 已验收。Qt Test 是架构测试，不能代替计划 T01–T23 的业务验收。
+7. W02 经用户人工检验通过，W03 数据存储基础子集已自动验证；不宣称 P0 已验收。Qt Test 不能代替计划 T01–T23 的最终业务验收。
 
 ## 下一轮实施顺序
 
 | 工作包 | 应继续做的内容 |
 |---|---|
 | W02 | 已完成独立 Validation、OrderPolicy、规则测试和 UI 对比度修复；后续发现规则缺口时在不改变7状态与既定不变量的前提下补测试 |
-| W03 | 替换空库限定实现，完成全实体JSON编码/解析、候选全局校验、备份底层、错误分类/恢复状态；完善10,000单与100 MiB边界；数据层不得处理密码 |
-| W04 | Auth/PBKDF2/bootstrap及真实登录UI；同一CatalogService的createMerchantWithShop最小子集，同事务账号+店铺，不能先单独落账号 |
+| W03 | 已完成全实体 JSON、全局校验、原子主文件、上一有效 `.bak`、RecoveryAvailable 与 100 MiB 超限测试；10,000 单性能样本及恢复 UI 按计划留在 W08 |
+| W04 | 下一步：Auth/PBKDF2/bootstrap及真实登录UI；同一CatalogService的createMerchantWithShop最小子集，同事务账号+店铺，不能先单独落账号 |
 | W05 | 扩展CatalogService资料/营业/菜品CRUD；同一OrderService实现updateCart，不新增CartService；Shop/Dish/Cart Models与真实顾客/商家页面 |
 | W06 | 扩展同一OrderService全部订单动作；OrderQueryService授权过滤与详情DTO、角色范围实际数据展示、骑手页与订单详情 |
 | W07 | 管理员账号逻辑删除、统计、Core闭环与Release验收 |
@@ -52,13 +53,13 @@
 
 主工程目录 `TakeoutOrderManagementSystem`；Windows Kit 为 `C:/Qt/6.11.2/mingw_64` + `C:/Qt/Tools/mingw1310_64`，CMake位于 `C:/Qt/Tools/CMake_64/bin`。具体命令见README。测试时 Qt/MinGW bin 必须在当前进程 PATH。
 
-历史架构目录可复用，当前验收目录为 `build/w02-debug` 和 `build/w02-release`。CTest 包含 `architecture`、`rules`、`shell_smoke`；测试用 QTemporaryDir，不读写正常用户数据。`--smoke-test` 用独立临时目录启动并退出。测试可选环境变量 TAKEOUT_SCREENSHOT 输出窗口截图，仅用于QA；离屏平台缺少中文字形时只核验布局/颜色，Windows 平台再核验实际中文。
+当前 W03 验收目录为 `build-w03-debug` 和 `build-w03-release`。两种配置的 CTest 均包含 `architecture`、`rules`、`persistence`、`shell_smoke`；测试用 QTemporaryDir，不读写正常用户数据。`--smoke-test` 用独立临时目录启动并退出。测试可选环境变量 TAKEOUT_SCREENSHOT 输出窗口截图，仅用于QA；离屏平台缺少中文字形时只核验布局/颜色，Windows 平台再核验实际中文。
 
-架构测试覆盖 Result、全部21种支付组合、保存失败/过期revision、bootstrap职责分离、未认证Service拒绝、空库JSON保护、Model协议、数值排序/ID、金额极值、导航不认证、主题 Palette/QSS 和第二实例互斥。规则测试覆盖输入边界、Unicode/UUID、金额、七状态迁移、完成与两类取消路径、时间/history篡改、历史快照不受当前名称/上架状态影响、引用和唯一性。
+架构测试覆盖 Result、全部21种支付组合、保存失败/过期revision、bootstrap职责分离、未认证Service拒绝、空库/非空 JSON、Model协议、数值排序/ID、金额极值、导航不认证、主题 Palette/QSS 和第二实例互斥。规则测试覆盖输入边界、Unicode/UUID、金额、七状态迁移、完成与两类取消路径、时间/history篡改、历史快照不受当前名称/上架状态影响、引用和唯一性。持久化测试覆盖全实体/可空字段往返、上一版本备份、可恢复报告且不覆盖损坏主文件、严格 schema/枚举/引用/时间拒绝、非法候选不覆盖及 100 MiB 超限拒绝。
 
 ## Git 与发布
 
-开发上传目标 GitHub `jjjphens-dot/qtseccion`；保留原 `origin`（东大GitLab），GitHub使用单独 `github` remote。0.3.0 从 GitHub main 的 `59e66d1` 创建 `feat/w02-validation-ui-contrast`；检验通过后推送该分支，不合并 main、不操作 GitLab。不得强推、重置或重建历史。
+开发上传目标 GitHub `jjjphens-dot/qtseccion`；保留原 `origin`（东大GitLab），GitHub使用单独 `github` remote。功能分支 `feat/w02-validation-ui-contrast` 从 GitHub main 的 `59e66d1` 创建，0.4.0 W03 在该分支接续提交；不合并 main、不操作 GitLab。不得强推、重置或重建历史。
 
 本轮开始已有 Sports2026 大量工作区删除及外卖模板 intent-to-add。仅暂存本轮架构相关路径，**不暂存或恢复 Sports2026 删除**。旧示例仍可能出现在提交树和历史中，当前唯一构建入口为外卖工程。
 

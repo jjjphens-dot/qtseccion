@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.21)
 
-project(TakeoutOrderManagementSystem VERSION 0.3.0 LANGUAGES CXX)
+project(TakeoutOrderManagementSystem VERSION 0.4.0 LANGUAGES CXX)
 
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTOMOC ON)
@@ -16,7 +16,8 @@ include(CTest)
 add_library(takeout_core STATIC
     core/enums.h core/entities.h core/result.h core/requests.h
     core/validation.h core/validation.cpp core/orderpolicy.h core/orderpolicy.cpp
-    data/repository.h data/jsonrepository.h data/jsonrepository.cpp
+    data/repository.h data/jsoncodec.h data/jsoncodec.cpp
+    data/jsonrepository.h data/jsonrepository.cpp
     data/datastore.h data/datastore.cpp data/apppaths.h data/apppaths.cpp
     services/sessioncontext.h services/sessioncontext.cpp
     services/servicebase.h services/authservice.h services/catalogservice.h

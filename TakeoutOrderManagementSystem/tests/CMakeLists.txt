@@ -5,5 +5,8 @@ set_tests_properties(architecture PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscr
 qt_add_executable(tst_rules tst_rules.cpp)
 target_link_libraries(tst_rules PRIVATE takeout_core Qt6::Test)
 add_test(NAME rules COMMAND tst_rules)
+qt_add_executable(tst_persistence tst_persistence.cpp)
+target_link_libraries(tst_persistence PRIVATE takeout_core Qt6::Test)
+add_test(NAME persistence COMMAND tst_persistence)
 add_test(NAME shell_smoke COMMAND TakeoutOrderManagementSystem --smoke-test)
 set_tests_properties(shell_smoke PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")

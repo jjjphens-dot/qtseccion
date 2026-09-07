@@ -1,13 +1,14 @@
 # 外卖订单管理系统
 
-C++17 / Qt 6.11.2 Widgets / CMake。当前版本 **0.3.0 W02 规则版（AI 辅助）**，不是完整业务系统，也不是课程纯手写版本。
+C++17 / Qt 6.11.2 Widgets / CMake。当前版本 **0.4.0 W03 持久化基础版（AI 辅助）**，不是完整业务系统，也不是课程纯手写版本。
 
 ## 当前可运行范围
 
 - 统一的实体、UUID ID、整数分金额、七个订单状态和 Result<T>/Result<void>。
 - AppContext 组合根；Repository → DataStore → Session → Service 的明确生命周期。
 - DataStore 候选快照事务，只有 Repository 保存成功后才替换内存并发出信号。
-- JsonRepository 使用 QFile/QSaveFile，仅支持合法空库读写。非空数据、损坏数据和待恢复备份均明确报错，不静默初始化或覆盖。
+- JsonRepository 完整读写五类业务集合，使用严格 schema、UTC 时间和稳定英文枚举；加载与保存均执行全局不变量校验。
+- QSaveFile 原子替换主文件；第二次及以后保存先验证主文件，并把上一有效版本原子写入 `.bak`。主文件缺失或损坏但备份有效时报告 `RecoveryAvailable`，不自动覆盖。
 - AppPaths、数据目录 QLockFile、NeedsAdminBootstrap 启动状态；不创建初始管理员或内置账号。
 - 四角色架构预览页面、只读 OrderTableModel、筛选排序 Proxy、金额和状态 Delegate。导航不执行登录，不包含演示业务数据。
 - Auth/Catalog/Order/Query/Admin/Statistics 接口与拒绝未授权调用的基础入口。未实现命令返回 NotImplemented，不能用返回成功的占位逻辑代替业务。
@@ -16,7 +17,7 @@ C++17 / Qt 6.11.2 Widgets / CMake。当前版本 **0.3.0 W02 规则版（AI 辅�
 
 ## 尚未实现
 
-登录/PBKDF2/bootstrap、商家建店、菜品 CRUD、购物车命令、订单状态变更命令、角色授权查询与详细 DTO、统计、全实体 JSON 编解码及校验接入、备份恢复体验和完整业务测试。报告不在本轮范围。
+登录/PBKDF2/bootstrap、商家建店、菜品 CRUD、购物车命令、订单状态变更命令、角色授权查询与详细 DTO、统计、备份恢复 UI 和完整业务测试。报告不在本轮范围。
 
 实现顺序和关键约束见 [agent.md](agent.md)，详细规划见 [CODING_PLAN.md](CODING_PLAN.md)。计划描述最终目标，不代表所有模块完成。
 
@@ -39,11 +40,11 @@ $env:PATH = 'C:/Qt/6.11.2/mingw_64/bin;C:/Qt/Tools/mingw1310_64/bin;' + $env:PAT
 ## 目录
 
 - `core/`：实体、枚举、请求与 Result。
-- `data/`：持久化接口、空库 JSON 实现、DataStore 和路径。
+- `data/`：严格 JSON 编解码、原子存储与备份、DataStore 和路径。
 - `services/`：Session、权限入口与分阶段业务接口。
 - `models/`、`delegates/`：Qt MVD。
 - `app/`：依赖组装；`mainwindow.*`：窗口和角色模块导航。
-- `tests/`：架构契约测试及窗口冒烟。
+- `tests/`：架构、规则、持久化契约测试及窗口冒烟。
 - `resources/`：可提交的 .qrc 和样式。
 
 ## 仓库

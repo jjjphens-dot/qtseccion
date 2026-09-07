@@ -132,7 +132,7 @@ private slots:
         QVERIFY(!stats.summary({}).ok());
         QCOMPARE(repository.writes, 0);
     }
-    void emptyJsonRoundTripAndNonemptyRefusal() {
+    void emptyAndNonemptyJsonRoundTrip() {
         QTemporaryDir temp;
         const auto path = temp.filePath("appdata.json");
         JsonRepository repository(path);
@@ -145,14 +145,17 @@ private slots:
         QCOMPARE(restored.value().savedAt, empty.savedAt);
         QFile before(path); QVERIFY(before.open(QIODevice::ReadOnly));
         const auto bytes = before.readAll(); before.close();
-        StoreSnapshot nonempty = empty; nonempty.accounts.push_back(Account{});
+        StoreSnapshot nonempty = empty; nonempty.revision = 1;
+        Account admin; admin.id="11111111-1111-4111-8111-111111111111";
+        admin.loginName="admin"; admin.displayName="管理员"; admin.role=Role::Admin;
+        admin.createdAt=empty.savedAt; nonempty.accounts.push_back(admin);
         auto save = repository.save(nonempty);
-        QVERIFY(!save.ok()); QCOMPARE(save.error().code, ErrorCode::NotImplemented);
-        QVERIFY(before.open(QIODevice::ReadOnly)); QCOMPARE(before.readAll(), bytes); before.close();
-        auto altered = bytes; altered.replace("\"accounts\": [", "\"accounts\": [{\"id\":\"existing\"}");
+        QVERIFY(save.ok()); QVERIFY(repository.load().ok());
+        QFile current(path); QVERIFY(current.open(QIODevice::ReadOnly)); auto altered=current.readAll(); current.close();
+        altered.replace("\"accounts\": [", "\"accounts\": [{\"id\":\"existing\"}");
         writeFile(path, altered);
         auto loaded = repository.load();
-        QVERIFY(!loaded.ok()); QCOMPARE(loaded.error().code, ErrorCode::NotImplemented);
+        QVERIFY(!loaded.ok()); QCOMPARE(loaded.error().code, ErrorCode::RecoveryAvailable);
         QVERIFY(!repository.save(empty).ok());
         QVERIFY(before.open(QIODevice::ReadOnly)); QCOMPARE(before.readAll(), altered);
     }
