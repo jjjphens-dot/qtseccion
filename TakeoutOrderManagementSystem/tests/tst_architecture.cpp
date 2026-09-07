@@ -251,7 +251,7 @@ private slots:
             QVERIFY(!context.session().current());
         }
         const auto tables = window.findChildren<QTableView*>();
-        QCOMPARE(tables.size(), 4);
+        QCOMPARE(tables.size(), 7);
         for (auto* table : tables) {
             QCOMPARE(table->model()->rowCount(), 0);
         }

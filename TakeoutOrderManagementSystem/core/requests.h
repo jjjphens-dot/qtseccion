@@ -15,6 +15,22 @@ struct DishDraft { QString name; Money priceCents = 0; bool isAvailable = false;
 using DishChanges = DishDraft;
 struct CartChanges { Id shopId; QVector<CartItem> items; };
 struct CheckoutRequest { QString customerName, address; };
+// Role-filtered order detail. It deliberately omits the mutable Order entity
+// and leaves customerName/address empty for an unclaimed rider view.
+struct OrderDetail {
+    Id id, customerId, shopId;
+    QVector<OrderItem> items;
+    OrderStatus status = OrderStatus::PendingPayment;
+    PaymentStatus paymentStatus = PaymentStatus::Unpaid;
+    Money subtotalCents = 0, deliveryFeeCents = 0, totalCents = 0, riderIncomeCents = 0;
+    QString customerName, address, shopName, shopAddress;
+    std::optional<QString> riderName;
+    QDateTime createdAt, updatedAt;
+    std::optional<QDateTime> paidAt, acceptedAt, readyAt, claimedAt,
+        deliveredAt, completedAt, cancelledAt;
+    QString cancelReason;
+    QVector<OrderHistoryEntry> history;
+};
 struct OrderFilter {
     QString keyword;
     std::optional<OrderStatus> status;

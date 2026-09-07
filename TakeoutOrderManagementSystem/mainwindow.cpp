@@ -18,6 +18,7 @@
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QHeaderView>
+#include <QInputDialog>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
@@ -50,7 +51,7 @@ MainWindow::MainWindow(takeout::AppContext &context,
       m_loggedOutFiller(new QWidget(this)) {
   using namespace takeout;
   ui->setupUi(this);
-  setWindowTitle(QStringLiteral("外卖订单管理系统 · W05 目录购物车版 0.6.0"));
+  setWindowTitle(QStringLiteral("外卖订单管理系统 · W06 订单闭环版 0.7.0"));
   resize(1200, 800);
   setMinimumSize(960, 640);
   auto *layout = new QVBoxLayout(ui->centralwidget);
@@ -166,9 +167,62 @@ MainWindow::MainWindow(takeout::AppContext &context,
       cartTable->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
       body->addWidget(new QLabel(QStringLiteral("当前购物车"), page));
       body->addWidget(cartTable, 1);
+      auto *orderTable = new QTableView(page);
+      orderTable->setObjectName("customerOrderTable");
+      auto *orderProxy = new OrderFilterProxyModel(orderTable);
+      orderProxy->setSourceModel(m_orders);
+      orderTable->setModel(orderProxy);
+      orderTable->setSelectionBehavior(QAbstractItemView::SelectRows);
+      orderTable->setItemDelegateForColumn(
+          OrderTableModel::Total, new MoneyDelegate(orderTable));
+      orderTable->setItemDelegateForColumn(
+          OrderTableModel::Status, new OrderStatusDelegate(orderTable));
+      orderTable->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+      body->addWidget(new QLabel(QStringLiteral("我的订单"), page));
+      body->addWidget(orderTable, 1);
+      auto *orderDetail = new QLabel(page);
+      orderDetail->setObjectName("customerOrderDetail");
+      orderDetail->setWordWrap(true);
+      body->addWidget(orderDetail);
+      connect(orderTable, &QTableView::clicked, this,
+              [this, orderDetail](const QModelIndex &index) {
+                const auto result = m_context.orderQuery().orderDetail(
+                    index.data(OrderTableModel::IdRole).toString());
+                if (!result.ok()) {
+                  orderDetail->setText(result.error().message);
+                  return;
+                }
+                const auto &value = result.value();
+                orderDetail->setText(
+                    QStringLiteral("店铺：%1　状态：%2　收货：%3　合计：%4分")
+                        .arg(value.shopName, statusLabel(value.status),
+                             value.address, QString::number(value.totalCents)));
+              });
+      auto *orderControls = new QHBoxLayout;
+      auto *createOrder = new QPushButton(QStringLiteral("提交订单"), page);
+      auto *payOrder = new QPushButton(QStringLiteral("模拟支付"), page);
+      auto *cancelOrder = new QPushButton(QStringLiteral("取消待支付订单"), page);
+      auto *confirmOrder = new QPushButton(QStringLiteral("确认收货"), page);
+      auto *orderMessage = new QLabel(page);
+      orderMessage->setObjectName("customerOrderStatus");
+      orderControls->addWidget(createOrder);
+      orderControls->addWidget(payOrder);
+      orderControls->addWidget(cancelOrder);
+      orderControls->addWidget(confirmOrder);
+      orderControls->addWidget(orderMessage, 1);
+      body->addLayout(orderControls);
       auto setMessage = [message](const Result<void> &result) {
         message->setText(result.ok() ? QStringLiteral("已保存")
                                      : result.error().message);
+      };
+      auto selectedOrderId = [orderTable] {
+        const auto index = orderTable->currentIndex();
+        return index.isValid() ? index.data(OrderTableModel::IdRole).toString()
+                               : Id{};
+      };
+      auto setOrderMessage = [orderMessage](const Result<void> &result) {
+        orderMessage->setText(result.ok() ? QStringLiteral("操作已保存")
+                                          : result.error().message);
       };
       connect(saveProfile, &QPushButton::clicked, this,
               [this, display, address, setMessage] {
@@ -209,6 +263,50 @@ MainWindow::MainWindow(takeout::AppContext &context,
           return;
         setMessage(m_context.orders().updateCart({m_cart->shopId(), {}}));
       });
+      connect(createOrder, &QPushButton::clicked, this,
+              [this, display, address, orderMessage] {
+                const auto result = m_context.orders().createOrder(
+                    {display->text(), address->text()});
+                orderMessage->setText(
+                    result.ok() ? QStringLiteral("订单已创建，请选择后支付")
+                                : result.error().message);
+              });
+      connect(payOrder, &QPushButton::clicked, this,
+              [this, selectedOrderId, setOrderMessage] {
+                const auto id = selectedOrderId();
+                if (id.isEmpty()) {
+                  setOrderMessage(Result<void>::failure(
+                      {ErrorCode::Validation, QStringLiteral("请先选择订单"),
+                       "orderId"}));
+                  return;
+                }
+                setOrderMessage(
+                    m_context.orders().execute(id, OrderAction::Pay));
+              });
+      connect(cancelOrder, &QPushButton::clicked, this,
+              [this, selectedOrderId, setOrderMessage] {
+                const auto id = selectedOrderId();
+                if (id.isEmpty()) {
+                  setOrderMessage(Result<void>::failure(
+                      {ErrorCode::Validation, QStringLiteral("请先选择订单"),
+                       "orderId"}));
+                  return;
+                }
+                setOrderMessage(
+                    m_context.orders().execute(id, OrderAction::Cancel));
+              });
+      connect(confirmOrder, &QPushButton::clicked, this,
+              [this, selectedOrderId, setOrderMessage] {
+                const auto id = selectedOrderId();
+                if (id.isEmpty()) {
+                  setOrderMessage(Result<void>::failure(
+                      {ErrorCode::Validation, QStringLiteral("请先选择订单"),
+                       "orderId"}));
+                  return;
+                }
+                setOrderMessage(m_context.orders().execute(
+                    id, OrderAction::ConfirmReceipt));
+              });
     } else if (roles.at(i) == Role::Merchant) {
       auto *profile = new QGroupBox(QStringLiteral("商家资料"), page);
       auto *profileForm = new QFormLayout(profile);
@@ -332,12 +430,188 @@ MainWindow::MainWindow(takeout::AppContext &context,
                 setMessage(m_context.catalog().deleteDish(
                     index.data(DishModel::IdRole).toString()));
               });
+      auto *orderTable = new QTableView(page);
+      orderTable->setObjectName("merchantOrderTable");
+      auto *orderProxy = new OrderFilterProxyModel(orderTable);
+      orderProxy->setSourceModel(m_orders);
+      orderTable->setModel(orderProxy);
+      orderTable->setSelectionBehavior(QAbstractItemView::SelectRows);
+      orderTable->setItemDelegateForColumn(
+          OrderTableModel::Total, new MoneyDelegate(orderTable));
+      orderTable->setItemDelegateForColumn(
+          OrderTableModel::Status, new OrderStatusDelegate(orderTable));
+      orderTable->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+      body->addWidget(new QLabel(QStringLiteral("本店订单"), page));
+      body->addWidget(orderTable, 1);
+      auto *orderDetail = new QLabel(page);
+      orderDetail->setObjectName("merchantOrderDetail");
+      orderDetail->setWordWrap(true);
+      body->addWidget(orderDetail);
+      connect(orderTable, &QTableView::clicked, this,
+              [this, orderDetail](const QModelIndex &index) {
+                const auto result = m_context.orderQuery().orderDetail(
+                    index.data(OrderTableModel::IdRole).toString());
+                if (!result.ok()) {
+                  orderDetail->setText(result.error().message);
+                  return;
+                }
+                const auto &value = result.value();
+                orderDetail->setText(
+                    QStringLiteral("顾客：%1　地址：%2　状态：%3　合计：%4分")
+                        .arg(value.customerName, value.address,
+                             statusLabel(value.status),
+                             QString::number(value.totalCents)));
+              });
+      auto *orderControls = new QHBoxLayout;
+      auto *acceptOrder = new QPushButton(QStringLiteral("接单"), page);
+      auto *rejectOrder = new QPushButton(QStringLiteral("拒单"), page);
+      auto *readyOrder = new QPushButton(QStringLiteral("标记出餐"), page);
+      auto *orderMessage = new QLabel(page);
+      orderMessage->setObjectName("merchantOrderStatus");
+      orderControls->addWidget(acceptOrder);
+      orderControls->addWidget(rejectOrder);
+      orderControls->addWidget(readyOrder);
+      orderControls->addWidget(orderMessage, 1);
+      body->addLayout(orderControls);
+      auto selectedOrderId = [orderTable] {
+        const auto index = orderTable->currentIndex();
+        return index.isValid() ? index.data(OrderTableModel::IdRole).toString()
+                               : Id{};
+      };
+      auto setOrderMessage = [orderMessage](const Result<void> &result) {
+        orderMessage->setText(result.ok() ? QStringLiteral("操作已保存")
+                                          : result.error().message);
+      };
+      connect(acceptOrder, &QPushButton::clicked, this,
+              [this, selectedOrderId, setOrderMessage] {
+                const auto id = selectedOrderId();
+                if (id.isEmpty()) {
+                  setOrderMessage(Result<void>::failure(
+                      {ErrorCode::Validation, QStringLiteral("请先选择订单"),
+                       "orderId"}));
+                  return;
+                }
+                setOrderMessage(
+                    m_context.orders().execute(id, OrderAction::Accept));
+              });
+      connect(rejectOrder, &QPushButton::clicked, this,
+              [this, selectedOrderId, setOrderMessage] {
+                const auto id = selectedOrderId();
+                if (id.isEmpty()) {
+                  setOrderMessage(Result<void>::failure(
+                      {ErrorCode::Validation, QStringLiteral("请先选择订单"),
+                       "orderId"}));
+                  return;
+                }
+                bool accepted = false;
+                const auto reason = QInputDialog::getText(
+                    this, QStringLiteral("拒单原因"), QStringLiteral("原因："),
+                    QLineEdit::Normal, {}, &accepted);
+                if (accepted)
+                  setOrderMessage(m_context.orders().execute(
+                      id, OrderAction::Reject, reason));
+              });
+      connect(readyOrder, &QPushButton::clicked, this,
+              [this, selectedOrderId, setOrderMessage] {
+                const auto id = selectedOrderId();
+                if (id.isEmpty()) {
+                  setOrderMessage(Result<void>::failure(
+                      {ErrorCode::Validation, QStringLiteral("请先选择订单"),
+                       "orderId"}));
+                  return;
+                }
+                setOrderMessage(
+                    m_context.orders().execute(id, OrderAction::MarkReady));
+              });
     } else {
-      body->addWidget(new QLabel(
-          QStringLiteral(
-              "管理员账号已通过首次初始化建立；账号管理将在 W07 实现。"),
-          page));
-      body->addStretch();
+      if (roles.at(i) == Role::Rider) {
+        auto *orderTable = new QTableView(page);
+        orderTable->setObjectName("riderOrderTable");
+        auto *orderProxy = new OrderFilterProxyModel(orderTable);
+        orderProxy->setSourceModel(m_orders);
+        orderTable->setModel(orderProxy);
+        orderTable->setSelectionBehavior(QAbstractItemView::SelectRows);
+        orderTable->setItemDelegateForColumn(
+            OrderTableModel::Total, new MoneyDelegate(orderTable));
+        orderTable->setItemDelegateForColumn(
+            OrderTableModel::Status, new OrderStatusDelegate(orderTable));
+        orderTable->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+        body->addWidget(new QLabel(QStringLiteral("配送订单"), page));
+        body->addWidget(orderTable, 1);
+        auto *detail = new QLabel(page);
+        detail->setObjectName("riderOrderDetail");
+        detail->setWordWrap(true);
+        body->addWidget(detail);
+        auto *orderControls = new QHBoxLayout;
+        auto *claimOrder = new QPushButton(QStringLiteral("认领订单"), page);
+        auto *deliveredOrder = new QPushButton(QStringLiteral("标记送达"), page);
+        auto *orderMessage = new QLabel(page);
+        orderMessage->setObjectName("riderOrderStatus");
+        orderControls->addWidget(claimOrder);
+        orderControls->addWidget(deliveredOrder);
+        orderControls->addWidget(orderMessage, 1);
+        body->addLayout(orderControls);
+        auto selectedOrderId = [orderTable] {
+          const auto index = orderTable->currentIndex();
+          return index.isValid()
+                     ? index.data(OrderTableModel::IdRole).toString()
+                     : Id{};
+        };
+        auto setOrderMessage = [orderMessage](const Result<void> &result) {
+          orderMessage->setText(result.ok() ? QStringLiteral("操作已保存")
+                                            : result.error().message);
+        };
+        auto refreshDetail = [this, orderTable, detail] {
+          const auto index = orderTable->currentIndex();
+          if (!index.isValid()) {
+            detail->clear();
+            return;
+          }
+          const auto result = m_context.orderQuery().orderDetail(
+              index.data(OrderTableModel::IdRole).toString());
+          if (!result.ok()) {
+            detail->setText(result.error().message);
+            return;
+          }
+          const auto &value = result.value();
+          detail->setText(QStringLiteral("店铺：%1　状态：%2　收货：%3")
+                              .arg(value.shopName, statusLabel(value.status),
+                                   value.address.isEmpty() ? QStringLiteral("认领后显示")
+                                                            : value.address));
+        };
+        connect(orderTable, &QTableView::clicked, this,
+                [refreshDetail](const QModelIndex &) { refreshDetail(); });
+        connect(claimOrder, &QPushButton::clicked, this,
+                [this, selectedOrderId, setOrderMessage] {
+                  const auto id = selectedOrderId();
+                  if (id.isEmpty()) {
+                    setOrderMessage(Result<void>::failure(
+                        {ErrorCode::Validation, QStringLiteral("请先选择订单"),
+                         "orderId"}));
+                    return;
+                  }
+                  setOrderMessage(
+                      m_context.orders().execute(id, OrderAction::Claim));
+                });
+        connect(deliveredOrder, &QPushButton::clicked, this,
+                [this, selectedOrderId, setOrderMessage] {
+                  const auto id = selectedOrderId();
+                  if (id.isEmpty()) {
+                    setOrderMessage(Result<void>::failure(
+                        {ErrorCode::Validation, QStringLiteral("请先选择订单"),
+                         "orderId"}));
+                    return;
+                  }
+                  setOrderMessage(m_context.orders().execute(
+                      id, OrderAction::MarkDelivered));
+                });
+      } else {
+        body->addWidget(new QLabel(
+            QStringLiteral(
+                "管理员账号已通过首次初始化建立；账号管理将在 W07 实现。"),
+            page));
+        body->addStretch();
+      }
     }
     m_pages->addWidget(page);
   }
