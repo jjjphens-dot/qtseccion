@@ -37,5 +37,11 @@ struct OrderFilter {
     std::optional<QDateTime> from, until; // UTC half-open [from, until).
 };
 struct DateRange { QDateTime from, until; };
-struct StatisticsSummary { qint64 completedCount = 0; Money totalCents = 0; };
+struct StatisticsSummary {
+    qint64 completedCount = 0;
+    Money totalCents = 0;
+    qint64 activeAccountCount = 0;
+    qint64 deletedAccountCount = 0;
+    qint64 activeShopCount = 0;
+};
 } // namespace takeout

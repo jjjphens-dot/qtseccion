@@ -15,6 +15,7 @@
 #include "mainwindow.h"
 #include "models/ordertablemodel.h"
 #include "models/orderfilterproxymodel.h"
+#include "models/accountmodel.h"
 #include "delegates/moneydelegate.h"
 #include "delegates/orderstatusdelegate.h"
 #include "dialogs/logindialog.h"
@@ -200,6 +201,18 @@ private slots:
         filter = {}; filter.until = now; proxy.setFilter(filter); QCOMPARE(proxy.rowCount(), 0);
         model.replaceProjection({}); QCOMPARE(model.rowCount(), 0);
     }
+    void accountProjectionExcludesCredentials() {
+        AccountModel model;
+        QAbstractItemModelTester tester(&model, QAbstractItemModelTester::FailureReportingMode::QtTest);
+        const auto now = QDateTime::currentDateTimeUtc();
+        model.replaceProjection({{"id-a", "alice", "Alice", Role::Customer, false, now},
+                                 {"id-b", "bob", "Bob", Role::Merchant, true, now}});
+        QCOMPARE(model.rowCount(), 2);
+        QCOMPARE(model.index(0, AccountModel::LoginName).data().toString(), QString("alice"));
+        QCOMPARE(model.index(0, AccountModel::RoleColumn).data().toString(), QString("普通用户"));
+        QCOMPARE(model.index(1, AccountModel::Status).data().toString(), QString("已删除"));
+        QCOMPARE(model.index(1, 0).data(AccountModel::IdRole).toString(), QString("id-b"));
+    }
     void moneyUsesIntegerCents() {
         MoneyDelegate delegate;
         QCOMPARE(delegate.displayText(QVariant::fromValue(qint64(2971)), QLocale()), QStringLiteral("￥29.71"));
@@ -254,7 +267,7 @@ private slots:
             QVERIFY(!context.session().current());
         }
         const auto tables = window.findChildren<QTableView*>();
-        QCOMPARE(tables.size(), 7);
+        QCOMPARE(tables.size(), 8);
         for (auto* table : tables) {
             QCOMPARE(table->model()->rowCount(), 0);
         }

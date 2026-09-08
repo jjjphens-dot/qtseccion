@@ -7,6 +7,7 @@
 #include "dialogs/logindialog.h"
 #include "dialogs/registerdialog.h"
 #include "models/cartmodel.h"
+#include "models/accountmodel.h"
 #include "models/dishmodel.h"
 #include "models/orderfilterproxymodel.h"
 #include "models/ordertablemodel.h"
@@ -14,6 +15,7 @@
 #include "services/catalogservice.h"
 #include "services/orderservice.h"
 #include <QCheckBox>
+#include <QComboBox>
 #include <QFormLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
@@ -30,7 +32,57 @@
 #include <QStackedWidget>
 #include <QStatusBar>
 #include <QTableView>
+#include <QTimeZone>
+#include <QSortFilterProxyModel>
 #include <QVBoxLayout>
+
+namespace {
+class AccountFilterProxy final : public QSortFilterProxyModel {
+public:
+  explicit AccountFilterProxy(QObject *parent = nullptr)
+      : QSortFilterProxyModel(parent) {}
+  void setKeyword(QString keyword) {
+    beginFilterChange();
+    m_keyword = std::move(keyword);
+    endFilterChange(QSortFilterProxyModel::Direction::Rows);
+  }
+  void setRole(std::optional<takeout::Role> role) {
+    beginFilterChange();
+    m_role = role;
+    endFilterChange(QSortFilterProxyModel::Direction::Rows);
+  }
+
+protected:
+  bool filterAcceptsRow(int sourceRow,
+                        const QModelIndex &sourceParent) const override {
+    const auto *model = sourceModel();
+    if (!model)
+      return false;
+    const auto login = model->index(sourceRow, takeout::AccountModel::LoginName,
+                                    sourceParent)
+                           .data()
+                           .toString();
+    const auto display =
+        model->index(sourceRow, takeout::AccountModel::DisplayName,
+                     sourceParent)
+            .data()
+            .toString();
+    if (!m_keyword.trimmed().isEmpty() &&
+        !login.contains(m_keyword.trimmed(), Qt::CaseInsensitive) &&
+        !display.contains(m_keyword.trimmed(), Qt::CaseInsensitive))
+      return false;
+    if (m_role && model->index(sourceRow, 0, sourceParent)
+                          .data(takeout::AccountModel::RoleRole)
+                          .toInt() != int(*m_role))
+      return false;
+    return true;
+  }
+
+private:
+  QString m_keyword;
+  std::optional<takeout::Role> m_role;
+};
+} // namespace
 
 MainWindow::MainWindow(takeout::AppContext &context,
                        const takeout::Result<takeout::StartupState> &startup,
@@ -40,6 +92,7 @@ MainWindow::MainWindow(takeout::AppContext &context,
       m_shops(new takeout::ShopModel(this)),
       m_dishes(new takeout::DishModel(this)),
       m_cart(new takeout::CartModel(this)),
+      m_accounts(new takeout::AccountModel(this)),
       m_startupState(startup.ok()
                          ? std::optional<takeout::StartupState>(startup.value())
                          : std::nullopt),
@@ -51,7 +104,7 @@ MainWindow::MainWindow(takeout::AppContext &context,
       m_loggedOutFiller(new QWidget(this)) {
   using namespace takeout;
   ui->setupUi(this);
-  setWindowTitle(QStringLiteral("外卖订单管理系统 · W06 订单闭环版 0.7.0"));
+  setWindowTitle(QStringLiteral("外卖订单管理系统 · W07 管理统计版 0.8.0"));
   resize(1200, 800);
   setMinimumSize(960, 640);
   auto *layout = new QVBoxLayout(ui->centralwidget);
@@ -184,6 +237,9 @@ MainWindow::MainWindow(takeout::AppContext &context,
       orderDetail->setObjectName("customerOrderDetail");
       orderDetail->setWordWrap(true);
       body->addWidget(orderDetail);
+      auto *customerStatistics = new QLabel(page);
+      customerStatistics->setObjectName("customerStatistics");
+      body->addWidget(customerStatistics);
       connect(orderTable, &QTableView::clicked, this,
               [this, orderDetail](const QModelIndex &index) {
                 const auto result = m_context.orderQuery().orderDetail(
@@ -447,6 +503,9 @@ MainWindow::MainWindow(takeout::AppContext &context,
       orderDetail->setObjectName("merchantOrderDetail");
       orderDetail->setWordWrap(true);
       body->addWidget(orderDetail);
+      auto *merchantStatistics = new QLabel(page);
+      merchantStatistics->setObjectName("merchantStatistics");
+      body->addWidget(merchantStatistics);
       connect(orderTable, &QTableView::clicked, this,
               [this, orderDetail](const QModelIndex &index) {
                 const auto result = m_context.orderQuery().orderDetail(
@@ -542,6 +601,9 @@ MainWindow::MainWindow(takeout::AppContext &context,
         detail->setObjectName("riderOrderDetail");
         detail->setWordWrap(true);
         body->addWidget(detail);
+        auto *riderStatistics = new QLabel(page);
+        riderStatistics->setObjectName("riderStatistics");
+        body->addWidget(riderStatistics);
         auto *orderControls = new QHBoxLayout;
         auto *claimOrder = new QPushButton(QStringLiteral("认领订单"), page);
         auto *deliveredOrder = new QPushButton(QStringLiteral("标记送达"), page);
@@ -606,11 +668,70 @@ MainWindow::MainWindow(takeout::AppContext &context,
                       id, OrderAction::MarkDelivered));
                 });
       } else {
-        body->addWidget(new QLabel(
-            QStringLiteral(
-                "管理员账号已通过首次初始化建立；账号管理将在 W07 实现。"),
-            page));
-        body->addStretch();
+        auto *accountFilters = new QHBoxLayout;
+        auto *accountSearch = new QLineEdit(page);
+        accountSearch->setObjectName("adminAccountSearch");
+        accountSearch->setPlaceholderText(QStringLiteral("搜索登录名或显示名"));
+        auto *accountRole = new QComboBox(page);
+        accountRole->setObjectName("adminAccountRoleFilter");
+        accountRole->addItem(QStringLiteral("全部角色"), -1);
+        accountRole->addItem(roleLabel(Role::Customer), int(Role::Customer));
+        accountRole->addItem(roleLabel(Role::Merchant), int(Role::Merchant));
+        accountRole->addItem(roleLabel(Role::Rider), int(Role::Rider));
+        accountRole->addItem(roleLabel(Role::Admin), int(Role::Admin));
+        accountFilters->addWidget(accountSearch, 1);
+        accountFilters->addWidget(accountRole);
+        body->addLayout(accountFilters);
+        auto *accountTable = new QTableView(page);
+        accountTable->setObjectName("adminAccountTable");
+        auto *accountProxy = new AccountFilterProxy(page);
+        accountProxy->setSourceModel(m_accounts);
+        accountTable->setModel(accountProxy);
+        accountTable->setSelectionBehavior(QAbstractItemView::SelectRows);
+        accountTable->setSelectionMode(QAbstractItemView::SingleSelection);
+        accountTable->horizontalHeader()->setSectionResizeMode(
+            QHeaderView::Stretch);
+        body->addWidget(new QLabel(QStringLiteral("账号列表"), page));
+        body->addWidget(accountTable, 1);
+        auto *accountControls = new QHBoxLayout;
+        auto *deleteAccount =
+            new QPushButton(QStringLiteral("删除选中账号"), page);
+        auto *accountMessage = new QLabel(page);
+        accountMessage->setObjectName("adminAccountStatus");
+        accountControls->addWidget(deleteAccount);
+        accountControls->addWidget(accountMessage, 1);
+        body->addLayout(accountControls);
+
+        auto *statistics = new QLabel(page);
+        statistics->setObjectName("adminStatistics");
+        statistics->setWordWrap(true);
+        body->addWidget(new QLabel(QStringLiteral("平台统计"), page));
+        body->addWidget(statistics);
+        connect(accountSearch, &QLineEdit::textChanged, accountProxy,
+                [accountProxy](const QString &text) {
+                  accountProxy->setKeyword(text);
+                });
+        connect(accountRole,
+                qOverload<int>(&QComboBox::currentIndexChanged), accountProxy,
+                [accountProxy, accountRole](int) {
+                  const int value = accountRole->currentData().toInt();
+                  accountProxy->setRole(
+                      value < 0 ? std::optional<Role>{}
+                                : std::optional<Role>(Role(value)));
+                });
+        connect(deleteAccount, &QPushButton::clicked, this,
+                [this, accountTable, accountMessage] {
+                  const auto index = accountTable->currentIndex();
+                  if (!index.isValid()) {
+                    accountMessage->setText(QStringLiteral("请先选择账号"));
+                    return;
+                  }
+                  const auto result = m_context.admin().deleteAccount(
+                      index.data(AccountModel::IdRole).toString());
+                  accountMessage->setText(
+                      result.ok() ? QStringLiteral("账号已删除")
+                                  : result.error().message);
+                });
       }
     }
     m_pages->addWidget(page);
@@ -654,6 +775,7 @@ void MainWindow::refreshBusinessModels() {
   m_shops->replaceProjection({});
   m_dishes->replaceProjection({});
   m_cart->replaceProjection({}, {});
+  m_accounts->replaceProjection({});
   if (!session)
     return;
   const Account *current = nullptr;
@@ -667,6 +789,17 @@ void MainWindow::refreshBusinessModels() {
   auto setText = [this](const char *name, const QString &value) {
     if (auto *edit = m_pages->findChild<QLineEdit *>(name))
       edit->setText(value);
+  };
+  const DateRange statisticsRange{
+      QDateTime::fromMSecsSinceEpoch(0, QTimeZone::UTC),
+      QDateTime::currentDateTimeUtc().addSecs(1)};
+  const auto statistics = m_context.statistics().summary(statisticsRange);
+  const auto statisticsValue =
+      statistics.ok() ? statistics.value() : StatisticsSummary{};
+  auto setStatistics = [this, &statistics](const char *name,
+                                           const QString &value) {
+    if (auto *label = m_pages->findChild<QLabel *>(name))
+      label->setText(statistics.ok() ? value : statistics.error().message);
   };
   if (session->role == Role::Customer) {
     setText("customerDisplayName", current->displayName);
@@ -706,6 +839,10 @@ void MainWindow::refreshBusinessModels() {
         m_cart->replaceProjection(cart.shopId, std::move(rows));
         break;
       }
+    setStatistics("customerStatistics",
+                  QStringLiteral("累计消费：%1分（已完成订单 %2 单）")
+                      .arg(statisticsValue.totalCents)
+                      .arg(statisticsValue.completedCount));
   } else if (session->role == Role::Merchant) {
     setText("merchantDisplayName", current->displayName);
     for (const auto &shop : snapshot.shops)
@@ -723,6 +860,30 @@ void MainWindow::refreshBusinessModels() {
         m_dishes->replaceProjection(std::move(dishes));
         break;
       }
+    setStatistics("merchantStatistics",
+                  QStringLiteral("本店营业额：%1分（已完成订单 %2 单，不含配送费）")
+                      .arg(statisticsValue.totalCents)
+                      .arg(statisticsValue.completedCount));
+  } else if (session->role == Role::Rider) {
+    setStatistics("riderStatistics",
+                  QStringLiteral("累计配送收入：%1分（已完成订单 %2 单）")
+                      .arg(statisticsValue.totalCents)
+                      .arg(statisticsValue.completedCount));
+  } else if (session->role == Role::Admin) {
+    const auto accounts = m_context.admin().listAccounts();
+    if (accounts.ok())
+      m_accounts->replaceProjection(accounts.value());
+    if (auto *label = m_pages->findChild<QLabel *>("adminStatistics")) {
+      if (statistics.ok())
+        label->setText(QStringLiteral("已完成订单：%1　平台成交额：%2分\n活跃账号：%3　已删除账号：%4　有效店铺：%5")
+                           .arg(statisticsValue.completedCount)
+                           .arg(statisticsValue.totalCents)
+                           .arg(statisticsValue.activeAccountCount)
+                           .arg(statisticsValue.deletedAccountCount)
+                           .arg(statisticsValue.activeShopCount));
+      else
+        label->setText(statistics.error().message);
+    }
   }
 }
 

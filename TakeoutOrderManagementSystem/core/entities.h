@@ -86,4 +86,12 @@ struct OrderRow {
     Money totalCents = 0;
     QDateTime createdAt;
 };
+
+struct AccountRow {
+    Id id;
+    QString loginName, displayName;
+    Role role = Role::Customer;
+    bool isDeleted = false;
+    QDateTime createdAt;
+};
 } // namespace takeout

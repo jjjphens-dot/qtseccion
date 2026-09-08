@@ -20,6 +20,8 @@ public:
   CatalogService &catalog() { return m_catalog; }
   OrderService &orders() { return m_orders; }
   OrderQueryService &orderQuery() { return m_orderQuery; }
+  AdminService &admin() { return m_admin; }
+  StatisticsService &statistics() { return m_statistics; }
   SessionContext &session() { return m_session; }
   DataStore &store() { return m_store; }
 

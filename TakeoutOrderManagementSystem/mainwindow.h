@@ -22,6 +22,7 @@ class OrderTableModel;
 class ShopModel;
 class DishModel;
 class CartModel;
+class AccountModel;
 } // namespace takeout
 
 QT_BEGIN_NAMESPACE
@@ -50,6 +51,7 @@ private:
   takeout::ShopModel *m_shops;
   takeout::DishModel *m_dishes;
   takeout::CartModel *m_cart;
+  takeout::AccountModel *m_accounts;
   std::optional<takeout::StartupState> m_startupState;
   QLabel *m_stateLabel;
   QLabel *m_sessionLabel;
