@@ -2,7 +2,7 @@
 
 ## 本轮授权与版本性质
 
-用户先要求依据 Coding Plan 实现程序架构，随后确认 W02、W04 人工检验通过并授权继续开发。当前 0.8.0 是 AI 辅助 W07 管理统计版；不是完整 P0，也不能标记为学生纯手写版本。报告仍不处理。后续工作包使用项目版本号区分，不新增额外内容哈希计算。学生手写版、学号 D01 仍需本人核实。此前对话记录已按用户要求提交到 GitLab `origin/main`；后续开发默认只修改本地工作区，除非用户再次明确要求推送。
+用户先要求依据 Coding Plan 实现程序架构，随后确认 W02、W04 人工检验通过并授权继续开发。当前 0.9.0 是 AI 辅助 W08 恢复加固版；不是完整 P0，也不能标记为学生纯手写版本。报告仍不处理。后续工作包使用项目版本号区分，不新增额外内容哈希计算。学生手写版、学号 D01 仍需本人核实。此前对话记录已按用户要求提交到 GitLab `origin/main`；后续开发默认只修改本地工作区，除非用户再次明确要求推送。
 
 阅读顺序：本文件 → README.md → CODING_PLAN.md → 当前源码。仓库内计划为工作区根目录计划的同步副本；开始下轮修改时核对是否出现更新，避免不同副本各自演进。计划中的工作包完成条件不能当作当前实现事实。
 
@@ -42,6 +42,14 @@
 - 已增加 `AccountModel` 和管理员账号管理/统计页面；账号页使用已授权投影的搜索/角色筛选代理，不向 UI 投影密码盐、密码哈希等凭据。顾客、商家、骑手页面同步显示各自统计。版本更新为 0.8.0。
 - Debug/Release 均通过 architecture、rules、persistence、auth、catalog、orders、admin、shell_smoke 共 8 项测试；新增账号删除、权限、购物车清理、角色统计和日期校验测试。
 
+## W08 实施结果
+
+- `JsonRepository` 增加严格校验的外部加载、原子导出和主文件恢复 API；恢复不会走 direct-write fallback。
+- `AppContext::recoverFromBackup()` 仅在启动未完成且备份已通过解析/不变量校验时工作，恢复前拒绝缺少有效管理员的非空备份。
+- `AdminService` 增加管理员限定的数据导出、导入和上一份备份恢复；导入保留当前管理员，候选保存成功后才替换内存。
+- 主窗口增加启动恢复确认按钮和管理员数据管理区；第二实例仍只显示明确锁冲突，不写入数据。
+- 密码摘要使用固定循环比较；新增 `hardening` 测试覆盖恢复、损坏导入、管理员保留和比较边界。
+
 ## 下一轮实施顺序
 
 | 工作包 | 应继续做的内容 |
@@ -52,7 +60,7 @@
 | W05 | 已完成：CatalogService资料/营业/菜品CRUD；同一OrderService实现updateCart；Shop/Dish/Cart Models与真实顾客/商家页面；目录、购物车重启恢复及模型协议测试通过 |
 | W06 | 已完成：同一OrderService的createOrder、pay/cancel/accept/reject/markReady/claim/markDelivered/confirmReceipt；OrderQueryService授权过滤与详情DTO；顾客、商家、骑手订单页；订单全流程、拒单/取消支路与重启恢复测试通过 |
 | W07 | 已完成：管理员账号逻辑删除、统计、Core闭环与Release验收 |
-| W08 | Core通过后完善恢复交互、第二实例UX、损坏文件/commit错误注入、密码工作线程/比较细节、性能 |
+| W08 | 已完成恢复交互、管理员导入导出、损坏导入拒绝、密码比较细节；系统化写入/commit故障注入、PBKDF2工作线程、10,000单性能样本仍待补齐 |
 
 `ServiceBase::pending` 是本轮明确失败的临时接口支撑。将具体方法实现时，应替换该方法内的 pending 调用，不要把 pending 改成 success：若统一改成功会同时破坏多个入口及 Result::error() 前置条件。所有临时接口需按计划返回真实业务结果。
 
@@ -62,7 +70,7 @@
 
 主工程目录 `TakeoutOrderManagementSystem`；Windows Kit 为 `C:/Qt/6.11.2/mingw_64` + `C:/Qt/Tools/mingw1310_64`，CMake位于 `C:/Qt/Tools/CMake_64/bin`。具体命令见README。测试时 Qt/MinGW bin 必须在当前进程 PATH。
 
-当前 W07 Debug 验收目录为 `build-w06-debug`，CTest 的 `architecture`、`rules`、`persistence`、`auth`、`catalog`、`orders`、`admin`、`shell_smoke` 共 8 项已全部通过；测试用 QTemporaryDir，不读写正常用户数据。Release 验收使用独立的 `build-w06-release`，同样运行 8 项测试。`--smoke-test` 用独立临时目录启动并退出。测试可选环境变量 TAKEOUT_SCREENSHOT 输出窗口截图，仅用于 QA；离屏平台缺少中文字形时只核验布局/颜色，Windows 平台再核验实际中文。
+当前 W08 Debug 验收目录为 `build-w08-debug`，CTest 的 `architecture`、`rules`、`persistence`、`auth`、`catalog`、`orders`、`admin`、`hardening`、`shell_smoke` 共 9 项已全部通过；测试用 QTemporaryDir，不读写正常用户数据。Release 验收需使用独立的 `build-w08-release` 再跑同一套 9 项测试。`--smoke-test` 用独立临时目录启动并退出。测试可选环境变量 TAKEOUT_SCREENSHOT 输出窗口截图，仅用于 QA；离屏平台缺少中文字形时只核验布局/颜色，Windows 平台再核验实际中文。
 
 架构测试覆盖 Result、状态矩阵、事务、认证表单角色约束、Model协议、主题及实例互斥。规则测试覆盖输入、UUID、金额、七状态、时间/history、引用和唯一性。持久化测试覆盖全实体往返、备份恢复报告、严格schema及文件上限。认证测试覆盖 bootstrap 保存失败重试、派生凭据、重复账号、普通入口角色限制、商家+店铺单提交、错误密码/角色/删除状态、四角色 Session 生命周期及重启登录。目录测试覆盖店铺/菜品 CRUD、同店重名、购物车边界、下架拒绝、重启恢复及三个业务 Model 的稳定 ID。订单测试覆盖完整状态流、取消/拒单、重复动作、支付快照变化、骑手隐私字段、角色查询和重启恢复。
 

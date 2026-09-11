@@ -87,7 +87,19 @@ Result<void> validateStored(const Account &account) {
 bool verifyPassword(const Account &account, const QString &password) {
   if (!validateStored(account).ok())
     return false;
-  return derive(password, account.passwordSalt, account.passwordIterations) ==
-         account.passwordHash;
+  return constantTimeEqual(
+      derive(password, account.passwordSalt, account.passwordIterations),
+      account.passwordHash);
+}
+
+bool constantTimeEqual(const QByteArray &left, const QByteArray &right) {
+  const auto size = qMax(left.size(), right.size());
+  quint8 difference = static_cast<quint8>(left.size() ^ right.size());
+  for (qsizetype i = 0; i < size; ++i) {
+    const auto lhs = i < left.size() ? static_cast<quint8>(left.at(i)) : 0;
+    const auto rhs = i < right.size() ? static_cast<quint8>(right.at(i)) : 0;
+    difference = static_cast<quint8>(difference | (lhs ^ rhs));
+  }
+  return difference == 0;
 }
 } // namespace takeout::Credentials

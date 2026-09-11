@@ -13,4 +13,5 @@ Result<Account> createAccount(const StoreSnapshot &snapshot,
                               const RegisterRequest &request);
 Result<void> validateStored(const Account &account);
 bool verifyPassword(const Account &account, const QString &password);
+bool constantTimeEqual(const QByteArray &left, const QByteArray &right);
 } // namespace takeout::Credentials

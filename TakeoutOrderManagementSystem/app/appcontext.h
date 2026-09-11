@@ -15,6 +15,7 @@ class AppContext final {
 public:
   explicit AppContext(AppPaths paths);
   Result<StartupState> initialize();
+  Result<StartupState> recoverFromBackup();
   const AppPaths &paths() const { return m_paths; }
   AuthService &auth() { return m_auth; }
   CatalogService &catalog() { return m_catalog; }

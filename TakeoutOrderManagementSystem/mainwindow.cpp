@@ -16,6 +16,7 @@
 #include "services/orderservice.h"
 #include <QCheckBox>
 #include <QComboBox>
+#include <QFileDialog>
 #include <QFormLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
@@ -24,6 +25,7 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QMessageBox>
 #include <QPushButton>
 #include <QSet>
 #include <QSizePolicy>
@@ -96,15 +98,19 @@ MainWindow::MainWindow(takeout::AppContext &context,
       m_startupState(startup.ok()
                          ? std::optional<takeout::StartupState>(startup.value())
                          : std::nullopt),
+      m_startupError(startup.ok()
+                         ? std::nullopt
+                         : std::optional<takeout::Error>(startup.error())),
       m_stateLabel(new QLabel(this)), m_sessionLabel(new QLabel(this)),
       m_loginButton(new QPushButton(QStringLiteral("登录"), this)),
       m_registerButton(new QPushButton(this)),
       m_logoutButton(new QPushButton(QStringLiteral("注销"), this)),
+      m_recoverButton(new QPushButton(QStringLiteral("从已验证备份恢复"), this)),
       m_navigation(nullptr), m_pages(nullptr), m_roleContent(nullptr),
       m_loggedOutFiller(new QWidget(this)) {
   using namespace takeout;
   ui->setupUi(this);
-  setWindowTitle(QStringLiteral("外卖订单管理系统 · W07 管理统计版 0.8.0"));
+  setWindowTitle(QStringLiteral("外卖订单管理系统 · W08 恢复加固版 0.9.0"));
   resize(1200, 800);
   setMinimumSize(960, 640);
   auto *layout = new QVBoxLayout(ui->centralwidget);
@@ -135,7 +141,10 @@ MainWindow::MainWindow(takeout::AppContext &context,
   m_loginButton->setObjectName("loginButton");
   m_registerButton->setObjectName("registerButton");
   m_logoutButton->setObjectName("logoutButton");
+  m_recoverButton->setObjectName("recoverBackupButton");
+  m_recoverButton->setVisible(false);
   authentication->addWidget(m_sessionLabel, 1);
+  authentication->addWidget(m_recoverButton);
   authentication->addWidget(m_registerButton);
   authentication->addWidget(m_loginButton);
   authentication->addWidget(m_logoutButton);
@@ -154,7 +163,7 @@ MainWindow::MainWindow(takeout::AppContext &context,
       QStringLiteral("W05：店铺、菜品、购物车；W06：本人订单与确认收货。"),
       QStringLiteral("账号与店铺已原子注册；W05：菜品管理；W06：订单处理。"),
       QStringLiteral("W06：配送池、认领和标记送达。"),
-      QStringLiteral("W07：账号管理与统计；W08：备份恢复。")};
+      QStringLiteral("W07：账号管理与统计；W08：备份恢复、导入导出。")};
   for (qsizetype i = 0; i < roles.size(); ++i) {
     m_navigation->addItem(roleLabel(roles.at(i)));
     auto *page = new QWidget(m_pages);
@@ -707,6 +716,23 @@ MainWindow::MainWindow(takeout::AppContext &context,
         statistics->setWordWrap(true);
         body->addWidget(new QLabel(QStringLiteral("平台统计"), page));
         body->addWidget(statistics);
+
+        auto *dataManagement = new QGroupBox(QStringLiteral("数据管理"), page);
+        auto *dataControls = new QHBoxLayout(dataManagement);
+        auto *exportData = new QPushButton(QStringLiteral("导出当前数据"),
+                                            dataManagement);
+        auto *importData = new QPushButton(QStringLiteral("导入数据"),
+                                            dataManagement);
+        auto *restoreBackup = new QPushButton(QStringLiteral("恢复上一份备份"),
+                                               dataManagement);
+        auto *dataMessage = new QLabel(dataManagement);
+        dataMessage->setObjectName("adminDataStatus");
+        dataMessage->setWordWrap(true);
+        dataControls->addWidget(exportData);
+        dataControls->addWidget(importData);
+        dataControls->addWidget(restoreBackup);
+        dataControls->addWidget(dataMessage, 1);
+        body->addWidget(dataManagement);
         connect(accountSearch, &QLineEdit::textChanged, accountProxy,
                 [accountProxy](const QString &text) {
                   accountProxy->setKeyword(text);
@@ -730,7 +756,51 @@ MainWindow::MainWindow(takeout::AppContext &context,
                       index.data(AccountModel::IdRole).toString());
                   accountMessage->setText(
                       result.ok() ? QStringLiteral("账号已删除")
-                                  : result.error().message);
+                                   : result.error().message);
+                 });
+        connect(exportData, &QPushButton::clicked, this,
+                [this, dataMessage] {
+                  const auto path = QFileDialog::getSaveFileName(
+                      this, QStringLiteral("导出数据"),
+                      QStringLiteral("takeout-export.json"),
+                      QStringLiteral("JSON 文件 (*.json);;所有文件 (*.*)"));
+                  if (path.isEmpty())
+                    return;
+                  const auto result = m_context.admin().exportData(path);
+                  dataMessage->setText(result.ok()
+                                            ? QStringLiteral("数据已原子导出：%1").arg(path)
+                                            : result.error().message);
+                });
+        connect(importData, &QPushButton::clicked, this,
+                [this, dataMessage] {
+                  const auto path = QFileDialog::getOpenFileName(
+                      this, QStringLiteral("导入数据"), {},
+                      QStringLiteral("JSON 文件 (*.json);;所有文件 (*.*)"));
+                  if (path.isEmpty())
+                    return;
+                  if (QMessageBox::warning(
+                          this, QStringLiteral("确认导入"),
+                          QStringLiteral("导入会替换当前业务数据，并把当前有效版本保存在 .bak。继续吗？"),
+                          QMessageBox::Yes | QMessageBox::No,
+                          QMessageBox::No) != QMessageBox::Yes)
+                    return;
+                  const auto result = m_context.admin().importData(path);
+                  dataMessage->setText(result.ok()
+                                            ? QStringLiteral("数据已导入")
+                                            : result.error().message);
+                });
+        connect(restoreBackup, &QPushButton::clicked, this,
+                [this, dataMessage] {
+                  if (QMessageBox::warning(
+                          this, QStringLiteral("确认恢复备份"),
+                          QStringLiteral("将用上一份已验证备份替换当前数据，当前版本会先保存为新的 .bak。继续吗？"),
+                          QMessageBox::Yes | QMessageBox::No,
+                          QMessageBox::No) != QMessageBox::Yes)
+                    return;
+                  const auto result = m_context.admin().restoreBackup();
+                  dataMessage->setText(result.ok()
+                                            ? QStringLiteral("已恢复上一份备份")
+                                            : result.error().message);
                 });
       }
     }
@@ -747,6 +817,8 @@ MainWindow::MainWindow(takeout::AppContext &context,
   connect(m_loginButton, &QPushButton::clicked, this, &MainWindow::openLogin);
   connect(m_registerButton, &QPushButton::clicked, this,
           &MainWindow::openRegistration);
+  connect(m_recoverButton, &QPushButton::clicked, this,
+          &MainWindow::recoverFromBackup);
   connect(m_logoutButton, &QPushButton::clicked, this, [this] {
     const auto result = m_context.auth().logout();
     Q_ASSERT(result.ok());
@@ -894,6 +966,10 @@ void MainWindow::refreshAuthenticationUi() {
     m_loginButton->setEnabled(false);
     m_registerButton->setEnabled(false);
     m_logoutButton->setEnabled(false);
+    const bool canRecover =
+        m_startupError && m_startupError->code == ErrorCode::RecoveryAvailable;
+    m_recoverButton->setVisible(canRecover);
+    m_recoverButton->setEnabled(canRecover);
     m_roleContent->setVisible(false);
     m_loggedOutFiller->setVisible(true);
     return;
@@ -907,6 +983,8 @@ void MainWindow::refreshAuthenticationUi() {
     m_registerButton->setEnabled(true);
     m_loginButton->setEnabled(false);
     m_logoutButton->setEnabled(false);
+    m_recoverButton->setVisible(false);
+    m_recoverButton->setEnabled(false);
     m_roleContent->setVisible(false);
     m_loggedOutFiller->setVisible(true);
     return;
@@ -916,6 +994,8 @@ void MainWindow::refreshAuthenticationUi() {
   m_loginButton->setEnabled(!session.has_value());
   m_registerButton->setEnabled(!session.has_value());
   m_logoutButton->setEnabled(session.has_value());
+  m_recoverButton->setVisible(false);
+  m_recoverButton->setEnabled(false);
   m_roleContent->setVisible(session.has_value());
   m_loggedOutFiller->setVisible(!session.has_value());
   if (!session) {
@@ -928,6 +1008,30 @@ void MainWindow::refreshAuthenticationUi() {
           .arg(session->displayName, roleLabel(session->role)));
   m_navigation->setCurrentRow(int(session->role));
   m_pages->setCurrentIndex(int(session->role));
+}
+
+void MainWindow::recoverFromBackup() {
+  using namespace takeout;
+  if (!m_startupError || m_startupError->code != ErrorCode::RecoveryAvailable)
+    return;
+  if (QMessageBox::warning(
+          this, QStringLiteral("确认恢复备份"),
+          QStringLiteral("主数据文件不可用。将用已验证的上一份备份覆盖主文件，继续吗？"),
+          QMessageBox::Yes | QMessageBox::No,
+          QMessageBox::No) != QMessageBox::Yes)
+    return;
+  const auto recovered = m_context.recoverFromBackup();
+  if (!recovered.ok()) {
+    m_startupError = recovered.error();
+    m_stateLabel->setText(QStringLiteral("恢复失败：") + recovered.error().message);
+    refreshAuthenticationUi();
+    return;
+  }
+  m_startupState = recovered.value();
+  m_startupError.reset();
+  statusBar()->showMessage(QStringLiteral("已从已验证备份恢复数据"));
+  refreshBusinessModels();
+  refreshAuthenticationUi();
 }
 
 void MainWindow::openLogin() {

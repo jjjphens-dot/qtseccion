@@ -19,6 +19,21 @@ Error persistence(const QString &path, const QString &detail) {
   return {ErrorCode::Persistence,
           QStringLiteral("无法访问数据文件：%1").arg(detail), path};
 }
+
+Result<void> validateWritableSnapshot(const StoreSnapshot &snapshot) {
+  if (snapshot.schemaVersion != Limits::SchemaVersion)
+    return Result<void>::failure(
+        {ErrorCode::UnsupportedVersion,
+         QStringLiteral("不支持的数据版本：%1").arg(snapshot.schemaVersion),
+         "schemaVersion"});
+  if (snapshot.revision < 0 || snapshot.revision > 9007199254740991LL ||
+      !snapshot.savedAt.isValid())
+    return Result<void>::failure(corrupt("snapshot"));
+  const auto valid = OrderPolicy::validateAll(snapshot);
+  if (!valid.ok())
+    return valid;
+  return Result<void>::success();
+}
 } // namespace
 
 Result<StoreSnapshot> JsonRepository::loadFile(const QString &path) const {
@@ -50,6 +65,13 @@ Result<StoreSnapshot> JsonRepository::loadBackup() const {
     return Result<StoreSnapshot>::failure(
         {ErrorCode::NotFound, QStringLiteral("备份文件不存在"), path});
   return loadFile(path);
+}
+
+Result<StoreSnapshot> JsonRepository::loadExternal(const QString &path) const {
+  if (path.trimmed().isEmpty())
+    return Result<StoreSnapshot>::failure(
+        {ErrorCode::Validation, QStringLiteral("导入路径不能为空"), "path"});
+  return loadFile(QFileInfo(path).absoluteFilePath());
 }
 
 Result<StoreSnapshot> JsonRepository::load() const {
@@ -106,18 +128,34 @@ Result<void> JsonRepository::writeFile(const QString &path,
   return Result<void>::success();
 }
 
-Result<void> JsonRepository::save(const StoreSnapshot &snapshot) {
-  if (snapshot.schemaVersion != Limits::SchemaVersion)
+Result<void> JsonRepository::exportSnapshot(const QString &path,
+                                             const StoreSnapshot &snapshot) const {
+  if (path.trimmed().isEmpty())
     return Result<void>::failure(
-        {ErrorCode::UnsupportedVersion,
-         QStringLiteral("不支持的数据版本：%1").arg(snapshot.schemaVersion),
-         "schemaVersion"});
-  if (snapshot.revision < 0 || snapshot.revision > 9007199254740991LL ||
-      !snapshot.savedAt.isValid())
-    return Result<void>::failure(corrupt("snapshot"));
-  const auto valid = OrderPolicy::validateAll(snapshot);
+        {ErrorCode::Validation, QStringLiteral("导出路径不能为空"), "path"});
+  const auto target = QFileInfo(path).absoluteFilePath();
+  const auto primary = QFileInfo(m_path).absoluteFilePath();
+  if (target == primary || target == primary + ".bak")
+    return Result<void>::failure(
+        {ErrorCode::Conflict, QStringLiteral("导出路径不能覆盖应用数据文件"),
+         "path"});
+  const auto valid = validateWritableSnapshot(snapshot);
   if (!valid.ok())
-    return Result<void>::failure(valid.error());
+    return valid;
+  return writeFile(target, snapshot);
+}
+
+Result<void> JsonRepository::restoreSnapshot(const StoreSnapshot &snapshot) const {
+  const auto valid = validateWritableSnapshot(snapshot);
+  if (!valid.ok())
+    return valid;
+  return writeFile(m_path, snapshot);
+}
+
+Result<void> JsonRepository::save(const StoreSnapshot &snapshot) {
+  const auto valid = validateWritableSnapshot(snapshot);
+  if (!valid.ok())
+    return valid;
   if (QFileInfo::exists(m_path)) {
     const auto previous = loadFile(m_path);
     if (!previous.ok())

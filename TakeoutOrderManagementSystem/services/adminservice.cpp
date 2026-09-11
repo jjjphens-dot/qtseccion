@@ -1,6 +1,8 @@
 #include "adminservice.h"
 
 #include "core/validation.h"
+#include "data/jsonrepository.h"
+#include <QFileInfo>
 #include <QSet>
 
 namespace takeout {
@@ -22,6 +24,10 @@ bool isNonTerminal(OrderStatus status) {
 }
 
 } // namespace
+
+AdminService::AdminService(DataStore &store, SessionContext &session,
+                           JsonRepository *repository)
+    : ServiceBase(store, session), m_repository(repository) {}
 
 Result<QVector<AccountRow>> AdminService::listAccounts() const {
   const auto permission = requireRole({Role::Admin});
@@ -113,6 +119,67 @@ Result<void> AdminService::deleteAccount(const Id &accountId) {
       candidate.carts.removeAt(i);
 
   return commit(std::move(candidate));
+}
+
+Result<void> AdminService::exportData(const QString &path) const {
+  const auto permission = requireRole({Role::Admin});
+  if (!permission.ok())
+    return permission;
+  if (!m_repository)
+    return Result<void>::failure(notImplemented(QStringLiteral("管理员数据导出")));
+  return m_repository->exportSnapshot(path, m_store.snapshot());
+}
+
+Result<void> AdminService::importSnapshot(StoreSnapshot snapshot) {
+  const auto permission = requireRole({Role::Admin});
+  if (!permission.ok())
+    return permission;
+
+  const auto session = m_session.current();
+  bool activeAdmin = false;
+  bool currentAdmin = false;
+  for (const auto &account : snapshot.accounts) {
+    if (account.role != Role::Admin || account.isDeleted)
+      continue;
+    activeAdmin = true;
+    if (session && account.id == session->accountId)
+      currentAdmin = true;
+  }
+  if (!activeAdmin)
+    return Result<void>::failure(
+        {ErrorCode::CorruptData, QStringLiteral("导入数据必须包含有效管理员"),
+         "accounts"});
+  if (!currentAdmin)
+    return Result<void>::failure(
+        {ErrorCode::Forbidden, QStringLiteral("导入数据不能移除当前管理员账号"),
+         "accounts"});
+
+  snapshot.revision = m_store.snapshot().revision;
+  return commit(std::move(snapshot));
+}
+
+Result<void> AdminService::importData(const QString &path) {
+  const auto permission = requireRole({Role::Admin});
+  if (!permission.ok())
+    return permission;
+  if (!m_repository)
+    return Result<void>::failure(notImplemented(QStringLiteral("管理员数据导入")));
+  const auto imported = m_repository->loadExternal(path);
+  if (!imported.ok())
+    return Result<void>::failure(imported.error());
+  return importSnapshot(imported.value());
+}
+
+Result<void> AdminService::restoreBackup() {
+  const auto permission = requireRole({Role::Admin});
+  if (!permission.ok())
+    return permission;
+  if (!m_repository)
+    return Result<void>::failure(notImplemented(QStringLiteral("管理员备份恢复")));
+  const auto backup = m_repository->loadBackup();
+  if (!backup.ok())
+    return Result<void>::failure(backup.error());
+  return importSnapshot(backup.value());
 }
 
 } // namespace takeout

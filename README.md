@@ -1,6 +1,6 @@
 # 外卖订单管理系统
 
-C++17 / Qt 6.11.2 Widgets / CMake。当前版本 **0.8.0 W07 管理统计版（AI 辅助）**，不是完整业务系统，也不是课程纯手写版本。
+C++17 / Qt 6.11.2 Widgets / CMake。当前版本 **0.9.0 W08 恢复加固版（AI 辅助）**，不是完整业务系统，也不是课程纯手写版本。
 
 ## 当前可运行范围
 
@@ -22,12 +22,15 @@ C++17 / Qt 6.11.2 Widgets / CMake。当前版本 **0.8.0 W07 管理统计版（A
 - 订单表使用 OrderTableModel、FilterProxyModel、MoneyDelegate 和 OrderStatusDelegate；顾客、商家、骑手页面分别提供对应动作入口。
 - W07 已接入 AdminService、AccountModel 和管理员页面：账号列表不暴露凭据，支持登录名/显示名搜索、角色筛选和逻辑删除；删除商家会在同一事务中关店、下架菜品并清理所有受影响购物车。
 - StatisticsService 按统一日期半开区间计算顾客消费、商家营业额、骑手收入和平台成交额，并返回活跃/已删除账号与有效店铺计数。
+- W08 增加已验证备份的启动恢复确认流程；主文件损坏或缺失时不会静默覆盖，恢复前必须由用户确认。
+- 管理员页面增加当前数据原子导出、严格校验导入和上一份备份恢复；导入要求保留当前有效管理员，失败不会发布内存快照。
+- 密码摘要比较改为固定循环，新增恢复、导入失败和账号保留约束测试。
 - 集中 Validation 覆盖账号、密码、Unicode 文本、价格、数量、UUID 等边界；OrderPolicy 可按历史重放校验金额、引用、角色、七状态、支付组合、关键时间、取消/退款与骑手收入。
 - 应用级 Palette 和完整 QSS 明确指定文字、背景、表头、输入、选中、禁用、菜单和状态栏颜色，避免系统深色主题造成白字白底。
 
 ## 尚未实现
 
-备份恢复 UI、完整异常注入和性能测试。报告不在本轮范围。
+系统化写入异常注入、PBKDF2 后台线程优化、10,000 单性能测试和报告仍未完成；报告不在本轮范围。
 
 实现顺序和关键约束见 [agent.md](agent.md)，详细规划见 [CODING_PLAN.md](CODING_PLAN.md)。计划描述最终目标，不代表所有模块完成。
 
@@ -37,13 +40,13 @@ C++17 / Qt 6.11.2 Widgets / CMake。当前版本 **0.8.0 W07 管理统计版（A
 
 ```powershell
 $env:PATH = 'C:/Qt/6.11.2/mingw_64/bin;C:/Qt/Tools/mingw1310_64/bin;' + $env:PATH
-& 'C:/Qt/Tools/CMake_64/bin/cmake.exe' -S . -B build-w06-debug -G 'MinGW Makefiles' -DCMAKE_BUILD_TYPE=Debug -DCMAKE_PREFIX_PATH=C:/Qt/6.11.2/mingw_64 -DCMAKE_CXX_COMPILER=C:/Qt/Tools/mingw1310_64/bin/g++.exe -DCMAKE_MAKE_PROGRAM=C:/Qt/Tools/mingw1310_64/bin/mingw32-make.exe -DBUILD_TESTING=ON
-& 'C:/Qt/Tools/CMake_64/bin/cmake.exe' --build build-w06-debug --parallel 4
-& 'C:/Qt/Tools/CMake_64/bin/ctest.exe' --test-dir build-w06-debug --output-on-failure
-& './build-w06-debug/TakeoutOrderManagementSystem.exe'
+& 'C:/Qt/Tools/CMake_64/bin/cmake.exe' -S . -B build-w08-debug -G 'MinGW Makefiles' -DCMAKE_BUILD_TYPE=Debug -DCMAKE_PREFIX_PATH=C:/Qt/6.11.2/mingw_64 -DCMAKE_CXX_COMPILER=C:/Qt/Tools/mingw1310_64/bin/g++.exe -DCMAKE_MAKE_PROGRAM=C:/Qt/Tools/mingw1310_64/bin/mingw32-make.exe -DBUILD_TESTING=ON
+& 'C:/Qt/Tools/CMake_64/bin/cmake.exe' --build build-w08-debug --parallel 4
+& 'C:/Qt/Tools/CMake_64/bin/ctest.exe' --test-dir build-w08-debug --output-on-failure
+& './build-w08-debug/TakeoutOrderManagementSystem.exe'
 ```
 
-每个构建命令检查退出码，失败立即停止。Release 将构建目录换为 `build-w06-release`，使用 `-DCMAKE_BUILD_TYPE=Release`；W07 验证在 Debug 和 Release 各运行 8 个 CTest 用例。当前验证的是 Windows/Qt 6.11.2/MinGW 13.1，未声称其他 Kit 已验证。
+每个构建命令检查退出码，失败立即停止。Release 将构建目录换为 `build-w08-release`，使用 `-DCMAKE_BUILD_TYPE=Release`；W08 Debug 已验证 9 个 CTest 用例，Release 需使用同一命令替换构建目录并再次执行 CTest。当前验证的是 Windows/Qt 6.11.2/MinGW 13.1，未声称其他 Kit 已验证。
 
 默认数据目录由 QStandardPaths::AppDataLocation 解析（组织名 QtTraining，应用名 TakeoutOrderManagementSystem），状态栏显示实际路径。`--data-dir <目录>` 可指定独立目录。`--smoke-test` 自动使用临时目录，短暂打开架构窗口并退出，适合冒烟测试。普通启动不会写业务文件或创建账号，只持有目录锁。
 

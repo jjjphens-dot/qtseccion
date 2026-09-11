@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.21)
 
-project(TakeoutOrderManagementSystem VERSION 0.8.0 LANGUAGES CXX)
+project(TakeoutOrderManagementSystem VERSION 0.9.0 LANGUAGES CXX)
 
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTOMOC ON)

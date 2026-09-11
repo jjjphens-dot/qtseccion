@@ -44,6 +44,7 @@ private:
   void refreshBusinessModels();
   void openLogin();
   void openRegistration();
+  void recoverFromBackup();
 
   Ui::MainWindow *ui;
   takeout::AppContext &m_context;
@@ -53,11 +54,13 @@ private:
   takeout::CartModel *m_cart;
   takeout::AccountModel *m_accounts;
   std::optional<takeout::StartupState> m_startupState;
+  std::optional<takeout::Error> m_startupError;
   QLabel *m_stateLabel;
   QLabel *m_sessionLabel;
   QPushButton *m_loginButton;
   QPushButton *m_registerButton;
   QPushButton *m_logoutButton;
+  QPushButton *m_recoverButton;
   QListWidget *m_navigation;
   QStackedWidget *m_pages;
   QSplitter *m_roleContent;
