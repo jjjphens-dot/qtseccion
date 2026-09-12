@@ -196,6 +196,80 @@ private slots:
     account.passwordHash = QByteArray(Credentials::HashBytes - 1, 'h');
     QVERIFY(!Credentials::validateStored(account).ok());
   }
+
+  void asyncPasswordFlowsRevalidateSnapshotBeforeCommit() {
+    MemoryRepository repository;
+    DataStore store(repository);
+    SessionContext session;
+    AuthService auth(store, session);
+    QVERIFY(store.initialize().ok());
+
+    const auto bootstrap = auth.beginBootstrap(
+        {"admin", "Admin!234", "管理员"});
+    QVERIFY(bootstrap.ok());
+    const auto bootstrapHash = Credentials::derivePbkdf2(
+        bootstrap.value().passwordUtf8,
+        bootstrap.value().account.passwordSalt,
+        bootstrap.value().account.passwordIterations);
+    QVERIFY(bootstrapHash.ok());
+    QVERIFY(auth.completeBootstrap(bootstrap.value(), bootstrapHash.value())
+                .ok());
+
+    const RegisterRequest customer{"async_customer", "Customer!1", "顾客",
+                                  "地址", Role::Customer};
+    const auto draft = auth.beginAccountRegistration(customer);
+    QVERIFY(draft.ok());
+    QVERIFY(auth.registerAccount(
+                         {"revision_bump", "Rider!234", "骑手", {},
+                          Role::Rider})
+                .ok());
+    const auto customerHash = Credentials::derivePbkdf2(
+        draft.value().passwordUtf8, draft.value().account.passwordSalt,
+        draft.value().account.passwordIterations);
+    QVERIFY(customerHash.ok());
+    QCOMPARE(auth.completeAccountRegistration(draft.value(),
+                                              customerHash.value())
+                  .error()
+                  .code,
+             ErrorCode::Conflict);
+
+    const auto fresh = auth.beginAccountRegistration(customer);
+    QVERIFY(fresh.ok());
+    const auto freshHash = Credentials::derivePbkdf2(
+        fresh.value().passwordUtf8, fresh.value().account.passwordSalt,
+        fresh.value().account.passwordIterations);
+    QVERIFY(freshHash.ok());
+    QVERIFY(auth.completeAccountRegistration(fresh.value(), freshHash.value())
+                .ok());
+
+    const auto login =
+        auth.beginLogin("async_customer", "Customer!1", Role::Customer);
+    QVERIFY(login.ok());
+    QVERIFY(auth.registerAccount(
+                         {"revision_bump_2", "Rider!345", "骑手二", {},
+                          Role::Rider})
+                .ok());
+    const auto loginHash = Credentials::derivePbkdf2(
+        "Customer!1", login.value().passwordSalt,
+        login.value().passwordIterations);
+    QVERIFY(loginHash.ok());
+    QCOMPARE(auth.completeLogin(login.value(), loginHash.value())
+                  .error()
+                  .code,
+             ErrorCode::Conflict);
+    QVERIFY(!session.current());
+
+    const auto freshLogin =
+        auth.beginLogin("async_customer", "Customer!1", Role::Customer);
+    QVERIFY(freshLogin.ok());
+    const auto freshLoginHash = Credentials::derivePbkdf2(
+        "Customer!1", freshLogin.value().passwordSalt,
+        freshLogin.value().passwordIterations);
+    QVERIFY(freshLoginHash.ok());
+    QVERIFY(auth.completeLogin(freshLogin.value(), freshLoginHash.value())
+                .ok());
+    QVERIFY(session.current());
+  }
 };
 QTEST_APPLESS_MAIN(AuthTest)
 #include "tst_auth.moc"

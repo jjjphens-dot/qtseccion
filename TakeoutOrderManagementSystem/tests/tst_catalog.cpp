@@ -124,6 +124,50 @@ private slots:
     QCOMPARE(cart.rowCount(), 0);
   }
 
+  void merchantAsyncRegistrationRevalidatesBeforeAtomicCommit() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    JsonRepository repository(directory.filePath("appdata.json"));
+    DataStore store(repository);
+    SessionContext session;
+    AuthService auth(store, session);
+    CatalogService catalog(store, session);
+    QVERIFY(store.initialize().ok());
+    QVERIFY(auth.bootstrapAdmin({"admin", "Admin!234", "管理员"}).ok());
+
+    const MerchantRegistration registration{
+        "async_merchant", "Merchant!1", "商家", "异步店铺", "简介", "地址"};
+    const auto draft = catalog.beginMerchantRegistration(registration);
+    QVERIFY(draft.ok());
+    QVERIFY(auth.registerAccount(
+                         {"bump", "Customer!1", "顾客", "地址",
+                          Role::Customer})
+                .ok());
+    const auto hash = Credentials::derivePbkdf2(
+        draft.value().account.passwordUtf8,
+        draft.value().account.account.passwordSalt,
+        draft.value().account.account.passwordIterations);
+    QVERIFY(hash.ok());
+    QCOMPARE(catalog.completeMerchantRegistration(draft.value(), hash.value())
+                  .error()
+                  .code,
+             ErrorCode::Conflict);
+    QCOMPARE(store.snapshot().shops.size(), 0);
+
+    const auto fresh = catalog.beginMerchantRegistration(registration);
+    QVERIFY(fresh.ok());
+    const auto freshHash = Credentials::derivePbkdf2(
+        fresh.value().account.passwordUtf8,
+        fresh.value().account.account.passwordSalt,
+        fresh.value().account.account.passwordIterations);
+    QVERIFY(freshHash.ok());
+    QVERIFY(catalog.completeMerchantRegistration(fresh.value(),
+                                                 freshHash.value())
+                .ok());
+    QCOMPARE(store.snapshot().shops.size(), 1);
+    QVERIFY(OrderPolicy::validateAll(store.snapshot()).ok());
+  }
+
   void dishRemovalClearsCartsInSameValidTransaction() {
     QTemporaryDir directory;
     QVERIFY(directory.isValid());

@@ -8,10 +8,10 @@ C++17 / Qt 6.11.2 Widgets / CMake。当前版本 **0.9.1 W08 Hardening（AI 辅�
 - AppContext 组合根；Repository → DataStore → Session → Service 的明确生命周期。
 - DataStore 候选快照事务，只有 Repository 保存成功后才替换内存并发出信号。
 - JsonRepository 完整读写五类业务集合，使用严格 schema、UTC 时间和稳定英文枚举；加载与保存均执行全局不变量校验。
-- QSaveFile 原子替换主文件；第二次及以后保存先验证主文件，并把上一有效版本原子写入 `.bak`。主文件缺失或损坏但备份有效时报告 `RecoveryAvailable`，不自动覆盖；确认恢复前会保留为 `appdata.corrupt.<timestamp>.json`，留存失败则取消恢复。
+- QSaveFile 原子替换主文件；第二次及以后保存先验证主文件，并把上一有效版本原子写入 `.bak`。主文件缺失或损坏但备份有效时报告 `RecoveryAvailable`，不自动覆盖；只有持有本次启动锁且仍处于可恢复状态的实例才能恢复；确认恢复前会保留为 `appdata.corrupt.<timestamp>.json`，留存失败则取消恢复。
 - AppPaths、数据目录 QLockFile、NeedsAdminBootstrap 启动状态；不创建初始管理员或内置账号。
 - 首次启动通过专用入口原子创建管理员；普通入口只注册用户、商家和骑手，管理员不能自助注册。
-- PBKDF2-HMAC-SHA256 使用每账号随机盐和 600,000 次迭代；密码原文不持久化。登录同时核对账号、密码、角色和删除状态，注销立即清除 Session。
+- PBKDF2-HMAC-SHA256 使用每账号随机盐和 600,000 次迭代；密码原文不持久化。登录同时核对账号、密码、角色和删除状态，注销立即清除 Session；GUI 只把摘要计算放入 QtConcurrent worker，快照、revision、Session 和提交仍在主线程完成。
 - 商家账号与唯一店铺由 CatalogService 在一个候选快照中保存，任一步失败均不产生半成品账号。
 - LoginDialog、RegisterDialog 和四角色真实路由已接入。未登录时隐藏角色业务区，登录后定位存储账号对应角色。
 - W05 已接入资料、店铺营业状态和菜品 CRUD；同店有效菜品名称规范化后唯一，删除采用逻辑删除。
@@ -25,13 +25,13 @@ C++17 / Qt 6.11.2 Widgets / CMake。当前版本 **0.9.1 W08 Hardening（AI 辅�
 - W08 增加已验证备份的启动恢复确认流程；主文件损坏或缺失时不会静默覆盖，恢复前必须由用户确认。
 - 管理员页面增加当前数据原子导出、严格校验导入和上一份备份恢复；完整备份含认证凭据摘要，界面明确禁止提交 Git、上传公共平台或随意共享；导入/恢复成功后清除 Session，要求重新登录，失败不会发布内存快照。
 - 密码摘要比较改为覆盖较长输入的固定工作循环；导出路径执行规范化、绝对路径、规范大小写比较，避免覆盖主数据或 `.bak`。
-- 写入器保留 QSaveFile 原子提交语义，并提供可注入的写入/备份/主文件失败 seam；硬化测试覆盖恢复矩阵、导入失败保留、路径别名、凭据长度边界和 10,000 单性能基线。
+- 写入器保留 QSaveFile 原子提交语义，并提供可注入的写入/备份/主文件失败 seam；硬化测试覆盖恢复矩阵、锁/资格边界、导入失败保留、backup 失败不发布、路径别名、凭据长度边界、1,200 单混合态样本和 10,000 单性能基线。
 - 集中 Validation 覆盖账号、密码、Unicode 文本、价格、数量、UUID 等边界；OrderPolicy 可按历史重放校验金额、引用、角色、七状态、支付组合、关键时间、取消/退款与骑手收入。
 - 应用级 Palette 和完整 QSS 明确指定文字、背景、表头、输入、选中、禁用、菜单和状态栏颜色，避免系统深色主题造成白字白底。
 
 ## 尚未实现
 
-PBKDF2 后台线程优化和课程验收报告仍未完成；当前同步 PBKDF2 保持认证正确性，报告不在本轮范围。
+课程验收报告仍未完成；当前任务已完成 PBKDF2 后台摘要计算、恢复资格/锁保护和混合态性能样本，报告不在本轮范围。
 
 实现顺序和关键约束见 [agent.md](agent.md)，详细规划见 [CODING_PLAN.md](CODING_PLAN.md)。计划描述最终目标，不代表所有模块完成。
 
@@ -40,7 +40,7 @@ PBKDF2 后台线程优化和课程验收报告仍未完成；当前同步 PBKDF2
 在 `TakeoutOrderManagementSystem` 目录执行，或在 Qt Creator 打开该目录的 CMakeLists.txt，选择 Desktop Qt 6.11.2 MinGW 64-bit Kit。
 
 ```powershell
-$env:PATH = 'C:/Qt/6.11.2/mingw_64/bin;C:/Qt/Tools/mingw1310_64/bin;' + $env:PATH
+$env:PATH = 'C:/Qt/Tools/mingw1310_64/bin;C:/Qt/6.11.2/mingw_64/bin;' + $env:PATH
 & 'C:/Qt/Tools/CMake_64/bin/cmake.exe' -S . -B build-w08-debug -G 'MinGW Makefiles' -DCMAKE_BUILD_TYPE=Debug -DCMAKE_PREFIX_PATH=C:/Qt/6.11.2/mingw_64 -DCMAKE_CXX_COMPILER=C:/Qt/Tools/mingw1310_64/bin/g++.exe -DCMAKE_MAKE_PROGRAM=C:/Qt/Tools/mingw1310_64/bin/mingw32-make.exe -DBUILD_TESTING=ON
 & 'C:/Qt/Tools/CMake_64/bin/cmake.exe' --build build-w08-debug --parallel 4
 & 'C:/Qt/Tools/CMake_64/bin/ctest.exe' --test-dir build-w08-debug --output-on-failure

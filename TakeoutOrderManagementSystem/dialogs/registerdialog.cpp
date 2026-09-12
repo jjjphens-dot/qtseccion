@@ -16,7 +16,8 @@ RegisterDialog::RegisterDialog(Mode mode, QWidget *parent)
       m_displayName(new QLineEdit(this)), m_addressLabel(new QLabel(this)),
       m_address(new QLineEdit(this)), m_shopNameLabel(new QLabel(this)),
       m_shopName(new QLineEdit(this)), m_descriptionLabel(new QLabel(this)),
-      m_description(new QTextEdit(this)), m_error(new QLabel(this)) {
+      m_description(new QTextEdit(this)), m_error(new QLabel(this)),
+      m_submit(nullptr), m_cancel(nullptr) {
   setWindowTitle(mode == Mode::BootstrapAdmin ? QStringLiteral("初始化管理员")
                                               : QStringLiteral("注册账号"));
   setModal(true);
@@ -55,9 +56,10 @@ RegisterDialog::RegisterDialog(Mode mode, QWidget *parent)
   m_form->addRow(m_descriptionLabel, m_description);
   auto *buttons = new QDialogButtonBox(
       QDialogButtonBox::Save | QDialogButtonBox::Cancel, this);
-  buttons->button(QDialogButtonBox::Save)
-      ->setText(mode == Mode::BootstrapAdmin ? QStringLiteral("创建管理员")
-                                             : QStringLiteral("注册"));
+  m_submit = buttons->button(QDialogButtonBox::Save);
+  m_cancel = buttons->button(QDialogButtonBox::Cancel);
+  m_submit->setText(mode == Mode::BootstrapAdmin ? QStringLiteral("创建管理员")
+                                                 : QStringLiteral("注册"));
   auto *layout = new QVBoxLayout(this);
   layout->addLayout(m_form);
   layout->addWidget(m_error);
@@ -84,12 +86,16 @@ void RegisterDialog::updateFields() {
 }
 
 void RegisterDialog::accept() {
+  if (m_busy)
+    return;
   if (m_password->text() != m_confirmPassword->text()) {
     setError(QStringLiteral("两次输入的密码不一致"));
     return;
   }
-  QDialog::accept();
+  emit submitted();
 }
+
+void RegisterDialog::complete() { QDialog::accept(); }
 
 AdminBootstrapRequest RegisterDialog::adminRequest() const {
   return {m_loginName->text(), m_password->text(), m_displayName->text()};
@@ -108,5 +114,19 @@ void RegisterDialog::setError(const QString &message) {
   m_error->setVisible(true);
   m_password->clear();
   m_confirmPassword->clear();
+}
+
+void RegisterDialog::setBusy(bool busy) {
+  m_busy = busy;
+  m_role->setEnabled(!busy && m_mode != Mode::BootstrapAdmin);
+  m_loginName->setEnabled(!busy);
+  m_password->setEnabled(!busy);
+  m_confirmPassword->setEnabled(!busy);
+  m_displayName->setEnabled(!busy);
+  m_address->setEnabled(!busy);
+  m_shopName->setEnabled(!busy);
+  m_description->setEnabled(!busy);
+  m_submit->setEnabled(!busy);
+  m_cancel->setEnabled(true);
 }
 } // namespace takeout

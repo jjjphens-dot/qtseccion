@@ -30,8 +30,17 @@ Result<Account> failure(const Error &error) {
 }
 } // namespace
 
-Result<Account> createAccount(const StoreSnapshot &snapshot,
-                              const RegisterRequest &request) {
+Result<QByteArray> derivePbkdf2(const QByteArray &passwordUtf8,
+                                const QByteArray &salt, int iterations) {
+  if (salt.size() != SaltBytes || iterations <= 0)
+    return Result<QByteArray>::failure(
+        {ErrorCode::CorruptData, QStringLiteral("密码派生参数无效"),
+         QStringLiteral("passwordSalt")});
+  return Result<QByteArray>::success(derive(passwordUtf8, salt, iterations));
+}
+
+Result<Account> prepareAccount(const StoreSnapshot &snapshot,
+                               const RegisterRequest &request) {
   auto checked = Validation::loginName(request.loginName);
   if (!checked.ok())
     return failure(checked.error());
@@ -67,10 +76,31 @@ Result<Account> createAccount(const StoreSnapshot &snapshot,
   account.passwordSalt = randomSalt();
   account.passwordIterations = Iterations;
   account.passwordAlgorithm = QString::fromLatin1(Algorithm);
-  account.passwordHash = derive(request.password, account.passwordSalt,
-                                account.passwordIterations);
   account.createdAt = QDateTime::currentDateTimeUtc();
   return Result<Account>::success(std::move(account));
+}
+
+Result<Account> finalizeAccount(Account account,
+                                const QByteArray &passwordHash) {
+  if (passwordHash.size() != HashBytes)
+    return Result<Account>::failure(
+        {ErrorCode::CorruptData, QStringLiteral("密码派生值长度无效"),
+         QStringLiteral("passwordHash")});
+  account.passwordHash = passwordHash;
+  return Result<Account>::success(std::move(account));
+}
+
+Result<Account> createAccount(const StoreSnapshot &snapshot,
+                              const RegisterRequest &request) {
+  const auto prepared = prepareAccount(snapshot, request);
+  if (!prepared.ok())
+    return prepared;
+  const auto derived = derivePbkdf2(request.password.toUtf8(),
+                                    prepared.value().passwordSalt,
+                                    prepared.value().passwordIterations);
+  if (!derived.ok())
+    return Result<Account>::failure(derived.error());
+  return finalizeAccount(prepared.value(), derived.value());
 }
 
 Result<void> validateStored(const Account &account) {
@@ -87,9 +117,9 @@ Result<void> validateStored(const Account &account) {
 bool verifyPassword(const Account &account, const QString &password) {
   if (!validateStored(account).ok())
     return false;
-  return constantTimeEqual(
-      derive(password, account.passwordSalt, account.passwordIterations),
-      account.passwordHash);
+  const auto derived = derivePbkdf2(password.toUtf8(), account.passwordSalt,
+                                    account.passwordIterations);
+  return derived.ok() && constantTimeEqual(derived.value(), account.passwordHash);
 }
 
 bool constantTimeEqual(const QByteArray &left, const QByteArray &right) {

@@ -5,6 +5,7 @@
 #include "delegates/moneydelegate.h"
 #include "delegates/orderstatusdelegate.h"
 #include "dialogs/logindialog.h"
+#include "dialogs/passwordjobcoordinator.h"
 #include "dialogs/registerdialog.h"
 #include "models/cartmodel.h"
 #include "models/accountmodel.h"
@@ -28,6 +29,7 @@
 #include <QLineEdit>
 #include <QListWidget>
 #include <QPushButton>
+#include <QPointer>
 #include <QSet>
 #include <QSizePolicy>
 #include <QSpinBox>
@@ -42,6 +44,7 @@ MainWindow::MainWindow(takeout::AppContext &context,
                        const takeout::Result<takeout::StartupState> &startup,
                        QWidget *parent)
     : QMainWindow(parent), ui(new Ui::MainWindow), m_context(context),
+      m_passwordJobs(new takeout::PasswordJobCoordinator(this)),
       m_orders(new takeout::OrderTableModel(this)),
       m_shops(new takeout::ShopModel(this)),
       m_dishes(new takeout::DishModel(this)),
@@ -718,6 +721,7 @@ MainWindow::MainWindow(takeout::AppContext &context,
   });
 
   auto reload = [this] {
+    m_passwordJobs->invalidate();
     m_orders->replaceProjection({});
     const auto result = m_context.orderQuery().visibleOrders();
     if (result.ok())
@@ -933,21 +937,46 @@ void MainWindow::openLogin() {
   using namespace takeout;
   if (!m_startupState || *m_startupState != StartupState::Ready)
     return;
-  LoginDialog dialog(this);
-  for (;;) {
-    const int result = dialog.exec();
-    if (result == LoginDialog::RegisterRequested) {
+  auto *dialog = new LoginDialog(this);
+  dialog->setAttribute(Qt::WA_DeleteOnClose);
+  QPointer<LoginDialog> guard(dialog);
+  connect(dialog, &QDialog::finished, this, [this](int result) {
+    m_passwordJobs->invalidate();
+    if (result == LoginDialog::RegisterRequested)
       openRegistration();
+  });
+  connect(dialog, &LoginDialog::submitted, this, [this, guard] {
+    if (!guard || guard->isBusy())
+      return;
+    const auto prepared = m_context.auth().beginLogin(
+        guard->loginName(), guard->password(), guard->role());
+    if (!prepared.ok()) {
+      guard->setError(prepared.error().message);
       return;
     }
-    if (result != QDialog::Accepted)
-      return;
-    const auto login = m_context.auth().login(dialog.loginName(),
-                                              dialog.password(), dialog.role());
-    if (login.ok())
-      return;
-    dialog.setError(login.error().message);
-  }
+    const auto work = prepared.value();
+    const auto passwordUtf8 = guard->password().toUtf8();
+    guard->setBusy(true);
+    m_passwordJobs->start(
+        passwordUtf8, work.passwordSalt, work.passwordIterations,
+        [this, guard, work](Result<QByteArray> derived) {
+          if (!guard)
+            return;
+          guard->setBusy(false);
+          if (!derived.ok()) {
+            guard->setError(QStringLiteral("密码处理失败"));
+            return;
+          }
+          const auto completed =
+              m_context.auth().completeLogin(work, derived.value());
+          if (!completed.ok()) {
+            guard->setError(completed.error().message);
+            return;
+          }
+          guard->accept();
+        });
+  });
+  dialog->open();
 }
 
 void MainWindow::openRegistration() {
@@ -955,27 +984,114 @@ void MainWindow::openRegistration() {
   if (!m_startupState || m_context.session().current())
     return;
   const bool bootstrap = *m_startupState == StartupState::NeedsAdminBootstrap;
-  RegisterDialog dialog(bootstrap ? RegisterDialog::Mode::BootstrapAdmin
-                                  : RegisterDialog::Mode::RegisterAccount,
-                        this);
-  for (;;) {
-    if (dialog.exec() != QDialog::Accepted)
+  auto *dialog = new RegisterDialog(
+      bootstrap ? RegisterDialog::Mode::BootstrapAdmin
+                : RegisterDialog::Mode::RegisterAccount,
+      this);
+  dialog->setAttribute(Qt::WA_DeleteOnClose);
+  QPointer<RegisterDialog> guard(dialog);
+  connect(dialog, &QDialog::finished, this,
+          [this](int) { m_passwordJobs->invalidate(); });
+  connect(dialog, &RegisterDialog::submitted, this, [this, guard, bootstrap] {
+    if (!guard || guard->isBusy())
       return;
-    Result<void> result =
-        bootstrap ? m_context.auth().bootstrapAdmin(dialog.adminRequest())
-        : dialog.accountRequest().role == Role::Merchant
-            ? m_context.catalog().createMerchantWithShop(
-                  dialog.merchantRequest())
-            : m_context.auth().registerAccount(dialog.accountRequest());
-    if (!result.ok()) {
-      dialog.setError(result.error().message);
-      continue;
+    if (bootstrap) {
+      const auto prepared =
+          m_context.auth().beginBootstrap(guard->adminRequest());
+      if (!prepared.ok()) {
+        guard->setError(prepared.error().message);
+        return;
+      }
+      const auto work = prepared.value();
+      guard->setBusy(true);
+      m_passwordJobs->start(
+          work.passwordUtf8, work.account.passwordSalt,
+          work.account.passwordIterations,
+          [this, guard, work](Result<QByteArray> derived) {
+            if (!guard)
+              return;
+            guard->setBusy(false);
+            if (!derived.ok()) {
+              guard->setError(QStringLiteral("密码处理失败"));
+              return;
+            }
+            const auto completed =
+                m_context.auth().completeBootstrap(work, derived.value());
+            if (!completed.ok()) {
+              guard->setError(completed.error().message);
+              return;
+            }
+            m_startupState = StartupState::Ready;
+            guard->complete();
+            refreshAuthenticationUi();
+          });
+      return;
     }
-    if (bootstrap)
-      m_startupState = StartupState::Ready;
-    refreshAuthenticationUi();
-    return;
-  }
+
+    const auto request = guard->accountRequest();
+    if (request.role == Role::Merchant) {
+      const auto prepared =
+          m_context.catalog().beginMerchantRegistration(guard->merchantRequest());
+      if (!prepared.ok()) {
+        guard->setError(prepared.error().message);
+        return;
+      }
+      const auto work = prepared.value();
+      guard->setBusy(true);
+      m_passwordJobs->start(
+          work.account.passwordUtf8, work.account.account.passwordSalt,
+          work.account.account.passwordIterations,
+          [this, guard, work](Result<QByteArray> derived) {
+            if (!guard)
+              return;
+            guard->setBusy(false);
+            if (!derived.ok()) {
+              guard->setError(QStringLiteral("密码处理失败"));
+              return;
+            }
+            const auto completed = m_context.catalog().completeMerchantRegistration(
+                work, derived.value());
+            if (!completed.ok()) {
+              guard->setError(completed.error().message);
+              return;
+            }
+            guard->complete();
+            refreshAuthenticationUi();
+          });
+      return;
+    }
+
+    const auto prepared =
+        m_context.auth().beginAccountRegistration(request);
+    if (!prepared.ok()) {
+      guard->setError(prepared.error().message);
+      return;
+    }
+    const auto work = prepared.value();
+    guard->setBusy(true);
+    m_passwordJobs->start(
+        work.passwordUtf8, work.account.passwordSalt,
+        work.account.passwordIterations,
+        [this, guard, work](Result<QByteArray> derived) {
+          if (!guard)
+            return;
+          guard->setBusy(false);
+          if (!derived.ok()) {
+            guard->setError(QStringLiteral("密码处理失败"));
+            return;
+          }
+          const auto completed =
+              m_context.auth().completeAccountRegistration(work,
+                                                          derived.value());
+          if (!completed.ok()) {
+            guard->setError(completed.error().message);
+            return;
+          }
+          guard->complete();
+          refreshAuthenticationUi();
+        });
+  });
+  dialog->open();
 }
 
 MainWindow::~MainWindow() { delete ui; }

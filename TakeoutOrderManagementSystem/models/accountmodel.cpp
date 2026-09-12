@@ -69,8 +69,4 @@ Qt::ItemFlags AccountModel::flags(const QModelIndex &index) const {
                          : Qt::NoItemFlags;
 }
 
-const AccountRow *AccountModel::rowAt(int row) const {
-  return row >= 0 && row < m_rows.size() ? &m_rows.at(row) : nullptr;
-}
-
 } // namespace takeout

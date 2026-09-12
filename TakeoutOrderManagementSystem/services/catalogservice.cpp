@@ -61,35 +61,86 @@ void removeDishFromCarts(StoreSnapshot &snapshot, const Id &dishId) {
 
 Result<void> CatalogService::createMerchantWithShop(
     const MerchantRegistration &registration) {
+  const auto prepared = beginMerchantRegistration(registration);
+  if (!prepared.ok())
+    return Result<void>::failure(prepared.error());
+  const auto derived = Credentials::derivePbkdf2(
+      prepared.value().account.passwordUtf8,
+      prepared.value().account.account.passwordSalt,
+      prepared.value().account.account.passwordIterations);
+  if (!derived.ok())
+    return Result<void>::failure(derived.error());
+  return completeMerchantRegistration(prepared.value(), derived.value());
+}
+
+Result<MerchantRegistrationWork>
+CatalogService::beginMerchantRegistration(
+    const MerchantRegistration &registration) const {
   auto candidate = m_store.snapshot();
   if (!m_store.isInitialized() || !hasAdmin(candidate))
-    return Result<void>::failure(
+    return Result<MerchantRegistrationWork>::failure(
         {ErrorCode::Forbidden, QStringLiteral("请先初始化管理员"), {}});
   auto checked = Validation::namedEntity(registration.shopName, "shop.name");
   if (!checked.ok())
-    return checked;
+    return Result<MerchantRegistrationWork>::failure(checked.error());
   checked = Validation::address(registration.address);
   if (!checked.ok())
-    return checked;
+    return Result<MerchantRegistrationWork>::failure(checked.error());
   checked = Validation::description(registration.description);
   if (!checked.ok())
-    return checked;
+    return Result<MerchantRegistrationWork>::failure(checked.error());
 
   RegisterRequest request{registration.loginName,
                           registration.password,
                           registration.displayName,
                           {},
                           Role::Merchant};
-  const auto account = AuthService::prepareAccount(candidate, request);
+  const auto account = Credentials::prepareAccount(candidate, request);
+  if (!account.ok())
+    return Result<MerchantRegistrationWork>::failure(account.error());
+  return Result<MerchantRegistrationWork>::success(
+      {{candidate.revision, account.value(), registration.password.toUtf8()},
+       normalized(registration.shopName), normalized(registration.description),
+       normalized(registration.address)});
+}
+
+Result<void> CatalogService::completeMerchantRegistration(
+    const MerchantRegistrationWork &work, const QByteArray &passwordHash) {
+  if (!m_store.isInitialized())
+    return Result<void>::failure(
+        {ErrorCode::Conflict, QStringLiteral("数据层尚未初始化"), {}});
+  auto candidate = m_store.snapshot();
+  if (candidate.revision != work.account.baseRevision)
+    return Result<void>::failure(
+        {ErrorCode::Conflict, QStringLiteral("数据已变化，请重新提交"),
+         QStringLiteral("revision")});
+  if (!hasAdmin(candidate))
+    return Result<void>::failure(
+        {ErrorCode::Forbidden, QStringLiteral("请先初始化管理员"), {}});
+  auto checked = Validation::namedEntity(work.shopName, "shop.name");
+  if (!checked.ok())
+    return checked;
+  checked = Validation::address(work.address);
+  if (!checked.ok())
+    return checked;
+  checked = Validation::description(work.description);
+  if (!checked.ok())
+    return checked;
+  for (const auto &account : candidate.accounts)
+    if (Validation::normalizeLoginName(account.loginName) ==
+        Validation::normalizeLoginName(work.account.account.loginName))
+      return Result<void>::failure(
+          {ErrorCode::Conflict, QStringLiteral("账号已存在"), "loginName"});
+  const auto account = Credentials::finalizeAccount(work.account.account,
+                                                     passwordHash);
   if (!account.ok())
     return Result<void>::failure(account.error());
-
   Shop shop;
   shop.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
   shop.merchantId = account.value().id;
-  shop.name = normalized(registration.shopName);
-  shop.description = normalized(registration.description);
-  shop.address = normalized(registration.address);
+  shop.name = work.shopName;
+  shop.description = work.description;
+  shop.address = work.address;
   shop.isOpen = false;
   shop.createdAt = account.value().createdAt;
   candidate.accounts.push_back(account.value());

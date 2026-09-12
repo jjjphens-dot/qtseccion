@@ -4,12 +4,14 @@
 #include <QTemporaryDir>
 #include <QFile>
 #include <QComboBox>
+#include <QElapsedTimer>
 #include <QLineEdit>
 #include <QListWidget>
 #include <QPushButton>
 #include <QSplitter>
 #include <QStackedWidget>
 #include <QTableView>
+#include <QTimer>
 #include "app/appcontext.h"
 #include "app/theme.h"
 #include "mainwindow.h"
@@ -19,6 +21,7 @@
 #include "delegates/moneydelegate.h"
 #include "delegates/orderstatusdelegate.h"
 #include "dialogs/logindialog.h"
+#include "dialogs/passwordjobcoordinator.h"
 #include "dialogs/registerdialog.h"
 #include <limits>
 
@@ -242,6 +245,67 @@ private slots:
         QVERIFY(bootstrapRole); QCOMPARE(bootstrapRole->count(),1);
         QCOMPARE(Role(bootstrapRole->currentData().toInt()),Role::Admin);
         QVERIFY(!bootstrapRole->isEnabled());
+    }
+    void passwordDigestRunsAsynchronouslyAndStaleResultIsDropped() {
+        PasswordJobCoordinator coordinator;
+        bool completed = false;
+        QByteArray digest;
+        coordinator.start("Async!234", QByteArray(16, 's'),
+                          Credentials::Iterations,
+                          [&](Result<QByteArray> result) {
+                              completed = true;
+                              if (result.ok())
+                                  digest = result.value();
+                          });
+        QTRY_VERIFY_WITH_TIMEOUT(completed, 10000);
+        QCOMPARE(digest.size(), Credentials::HashBytes);
+
+        bool staleCalled = false;
+        coordinator.start("ignored", QByteArray(1, 'x'), 1,
+                          [&](Result<QByteArray>) { staleCalled = true; });
+        coordinator.invalidate();
+        QTest::qWait(100);
+        QVERIFY(!staleCalled);
+    }
+    void passwordDigestKeepsGuiThreadResponsive() {
+        // Baseline: the same derivation executed on this thread. If the
+        // coordinator ran PBKDF2 on the GUI thread, the heartbeat below could
+        // not tick for about this long.
+        QElapsedTimer direct;
+        direct.start();
+        const auto directResult =
+            Credentials::derivePbkdf2("Gui!2345", QByteArray(16, 's'),
+                                      Credentials::Iterations);
+        const auto digestMs = direct.elapsed();
+        QVERIFY(directResult.ok());
+        if (digestMs < 100)
+            QSKIP("PBKDF2 too fast on this machine to separate the two cases");
+
+        PasswordJobCoordinator coordinator;
+        qint64 maxGapMs = 0;
+        bool completed = false;
+        QElapsedTimer gap;
+        QTimer heartbeat;
+        heartbeat.setInterval(5);
+        connect(&heartbeat, &QTimer::timeout,
+                [&gap, &maxGapMs] { maxGapMs = qMax(maxGapMs, gap.restart()); });
+        gap.start();
+        heartbeat.start();
+        coordinator.start("Gui!2345", QByteArray(16, 's'),
+                          Credentials::Iterations,
+                          [&](Result<QByteArray>) { completed = true; });
+        QTRY_VERIFY_WITH_TIMEOUT(completed, 20000);
+        heartbeat.stop();
+
+        qInfo().noquote()
+            << QStringLiteral("GUI-RESPONSIVE digestMs=%1 maxEventLoopGapMs=%2")
+                   .arg(digestMs)
+                   .arg(maxGapMs);
+        // The GUI thread stalled for well under one whole derivation.
+        QVERIFY2(maxGapMs < digestMs / 2,
+                 qPrintable(QStringLiteral("maxGapMs=%1 digestMs=%2")
+                                .arg(maxGapMs)
+                                .arg(digestMs)));
     }
     void shellNavigationDoesNotAuthenticate() {
         applyApplicationTheme(*qApp);

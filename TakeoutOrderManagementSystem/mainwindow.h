@@ -23,6 +23,7 @@ class ShopModel;
 class DishModel;
 class CartModel;
 class AccountModel;
+class PasswordJobCoordinator;
 } // namespace takeout
 
 QT_BEGIN_NAMESPACE
@@ -48,6 +49,7 @@ private:
 
   Ui::MainWindow *ui;
   takeout::AppContext &m_context;
+  takeout::PasswordJobCoordinator *m_passwordJobs;
   takeout::OrderTableModel *m_orders;
   takeout::ShopModel *m_shops;
   takeout::DishModel *m_dishes;

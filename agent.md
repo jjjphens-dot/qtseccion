@@ -45,12 +45,12 @@
 ## W08 实施结果
 
 - `JsonRepository` 增加严格校验的外部加载、原子导出和主文件恢复 API；恢复不会走 direct-write fallback。
-- `AppContext::recoverFromBackup()` 仅在启动未完成且备份已通过解析/不变量校验时工作；主文件存在时先保存为 `appdata.corrupt.<timestamp>.json`，复制失败不覆盖原文件。
+- `AppContext::recoverFromBackup()` 仅在本实例持有启动锁、启动结果明确为 `RecoveryAvailable` 且数据层尚未初始化时工作；主文件存在时先保存为 `appdata.corrupt.<timestamp>.json`，复制失败不覆盖原文件。普通 CorruptData/UnsupportedVersion、第二实例和已初始化实例均无恢复资格。
 - `AdminService` 增加管理员限定的数据导出、导入和上一份备份恢复；导入保留当前管理员，候选保存成功后才替换内存，成功后清除 Session 要求重新登录。
 - 主窗口增加启动恢复确认按钮和管理员数据管理区；第二实例仍只显示明确锁冲突，不写入数据。
 - 管理员数据管理组件独立于主窗口，显示完整备份敏感性警告并使用 `takeout-full-backup.json` 默认命名；账号过滤代理也移出主窗口。
-- 密码摘要使用覆盖较长输入的固定工作循环；导出路径执行 Windows 大小写和规范路径保护；`AtomicFileWriter` 支持备份/主文件故障注入测试。
-- `hardening` 测试覆盖恢复矩阵、损坏/缺管理员导入、Session 失效、路径别名、写入失败、比较边界和 10,000 单性能基线。
+- 密码摘要使用覆盖较长输入的固定工作循环；GUI 通过 `PasswordJobCoordinator` 在 QtConcurrent worker 中派生摘要，完成回调重新校验 revision/Session；导出路径执行 Windows 大小写和规范路径保护；`AtomicFileWriter` 支持备份/主文件故障注入测试。
+- `hardening` 测试覆盖恢复矩阵、锁/资格边界、损坏/缺管理员导入、Session 失效、路径别名、backup/primary 写入失败不发布、比较边界、1,200 单混合态样本和 10,000 单性能基线。
 
 ## 下一轮实施顺序
 
@@ -62,7 +62,7 @@
 | W05 | 已完成：CatalogService资料/营业/菜品CRUD；同一OrderService实现updateCart；Shop/Dish/Cart Models与真实顾客/商家页面；目录、购物车重启恢复及模型协议测试通过 |
 | W06 | 已完成：同一OrderService的createOrder、pay/cancel/accept/reject/markReady/claim/markDelivered/confirmReceipt；OrderQueryService授权过滤与详情DTO；顾客、商家、骑手订单页；订单全流程、拒单/取消支路与重启恢复测试通过 |
 | W07 | 已完成：管理员账号逻辑删除、统计、Core闭环与Release验收 |
-| W08 | 已完成恢复交互、管理员导入导出、损坏导入拒绝、密码比较细节、写入/commit故障注入、10,000单性能样本；PBKDF2后台线程优化仍待后续独立改造 |
+| W08 | 已完成恢复交互与锁/资格保护、管理员导入导出、损坏导入拒绝、密码比较细节、backup/primary 写入故障注入、PBKDF2 后台摘要计算、1,200 单混合态与 10,000 单性能样本 |
 
 `ServiceBase::pending` 是本轮明确失败的临时接口支撑。将具体方法实现时，应替换该方法内的 pending 调用，不要把 pending 改成 success：若统一改成功会同时破坏多个入口及 Result::error() 前置条件。所有临时接口需按计划返回真实业务结果。
 

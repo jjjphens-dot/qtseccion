@@ -11,7 +11,9 @@ namespace takeout {
 LoginDialog::LoginDialog(QWidget *parent)
     : QDialog(parent), m_role(new QComboBox(this)),
       m_loginName(new QLineEdit(this)), m_password(new QLineEdit(this)),
-      m_error(new QLabel(this)), m_register(new QPushButton(this)) {
+      m_error(new QLabel(this)),
+      m_submit(new QPushButton(QStringLiteral("登录"), this)),
+      m_register(new QPushButton(this)) {
   setWindowTitle(QStringLiteral("账号登录"));
   setModal(true);
   setMinimumWidth(420);
@@ -32,20 +34,23 @@ LoginDialog::LoginDialog(QWidget *parent)
   form->addRow(QStringLiteral("角色"), m_role);
   form->addRow(QStringLiteral("账号"), m_loginName);
   form->addRow(QStringLiteral("密码"), m_password);
-  auto *login = new QPushButton(QStringLiteral("登录"), this);
-  login->setObjectName("submitLogin");
+  m_submit->setObjectName("submitLogin");
   m_register->setText(QStringLiteral("注册新账号"));
   auto *cancel = new QPushButton(QStringLiteral("取消"), this);
   auto *buttons = new QHBoxLayout;
   buttons->addWidget(m_register);
   buttons->addStretch();
   buttons->addWidget(cancel);
-  buttons->addWidget(login);
+  buttons->addWidget(m_submit);
   auto *layout = new QVBoxLayout(this);
   layout->addLayout(form);
   layout->addWidget(m_error);
   layout->addLayout(buttons);
-  connect(login, &QPushButton::clicked, this, &QDialog::accept);
+  connect(m_submit, &QPushButton::clicked, this,
+          [this] {
+            if (!m_busy)
+              emit submitted();
+          });
   connect(cancel, &QPushButton::clicked, this, &QDialog::reject);
   connect(m_register, &QPushButton::clicked, this,
           [this] { done(RegisterRequested); });
@@ -61,5 +66,14 @@ void LoginDialog::setError(const QString &message) {
   m_error->setVisible(true);
   m_password->clear();
   m_password->setFocus();
+}
+
+void LoginDialog::setBusy(bool busy) {
+  m_busy = busy;
+  m_role->setEnabled(!busy);
+  m_loginName->setEnabled(!busy);
+  m_password->setEnabled(!busy);
+  m_register->setEnabled(!busy && role() != Role::Admin);
+  m_submit->setEnabled(!busy);
 }
 } // namespace takeout

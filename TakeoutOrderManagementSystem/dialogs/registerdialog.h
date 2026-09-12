@@ -6,6 +6,7 @@ class QComboBox;
 class QFormLayout;
 class QLabel;
 class QLineEdit;
+class QPushButton;
 class QTextEdit;
 
 namespace takeout {
@@ -19,9 +20,13 @@ public:
   RegisterRequest accountRequest() const;
   MerchantRegistration merchantRequest() const;
   void setError(const QString &message);
-
-protected:
+  void setBusy(bool busy);
+  bool isBusy() const { return m_busy; }
   void accept() override;
+  void complete();
+
+signals:
+  void submitted();
 
 private:
   void updateFields();
@@ -39,5 +44,8 @@ private:
   QLabel *m_descriptionLabel;
   QTextEdit *m_description;
   QLabel *m_error;
+  QPushButton *m_submit;
+  QPushButton *m_cancel;
+  bool m_busy = false;
 };
 } // namespace takeout

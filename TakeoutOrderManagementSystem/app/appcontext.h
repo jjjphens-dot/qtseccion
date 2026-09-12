@@ -27,6 +27,13 @@ public:
   DataStore &store() { return m_store; }
 
 private:
+  enum class StartupPhase {
+    NeverInitialized,
+    RecoveryAvailable,
+    Initialized,
+    FailedNonRecoverable,
+  };
+
   AppPaths m_paths;
   QLockFile m_lock;
   JsonRepository m_repository;
@@ -38,5 +45,6 @@ private:
   OrderQueryService m_orderQuery;
   AdminService m_admin;
   StatisticsService m_statistics;
+  StartupPhase m_startupPhase = StartupPhase::NeverInitialized;
 };
 } // namespace takeout

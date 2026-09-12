@@ -10,7 +10,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(CMAKE_CXX_EXTENSIONS OFF)
-find_package(Qt6 6.11.2 REQUIRED COMPONENTS Core Gui Widgets Network)
+find_package(Qt6 6.11.2 REQUIRED COMPONENTS Core Gui Widgets Network Concurrent)
 include(CTest)
 
 add_library(takeout_core STATIC
@@ -48,11 +48,12 @@ add_library(takeout_ui STATIC
     app/theme.h app/theme.cpp resources/resources.qrc
     dialogs/logindialog.h dialogs/logindialog.cpp
     dialogs/registerdialog.h dialogs/registerdialog.cpp
+    dialogs/passwordjobcoordinator.h dialogs/passwordjobcoordinator.cpp
     delegates/moneydelegate.h delegates/moneydelegate.cpp
     delegates/orderstatusdelegate.h delegates/orderstatusdelegate.cpp
     widgets/admindatamanagementwidget.h widgets/admindatamanagementwidget.cpp
 )
-target_link_libraries(takeout_ui PUBLIC takeout_models Qt6::Widgets)
+target_link_libraries(takeout_ui PUBLIC takeout_models Qt6::Widgets Qt6::Concurrent)
 
 qt_add_executable(TakeoutOrderManagementSystem WIN32 main.cpp)
 target_link_libraries(TakeoutOrderManagementSystem PRIVATE takeout_ui)
