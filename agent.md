@@ -63,6 +63,7 @@
 | W06 | 已完成：同一OrderService的createOrder、pay/cancel/accept/reject/markReady/claim/markDelivered/confirmReceipt；OrderQueryService授权过滤与详情DTO；顾客、商家、骑手订单页；订单全流程、拒单/取消支路与重启恢复测试通过 |
 | W07 | 已完成：管理员账号逻辑删除、统计、Core闭环与Release验收 |
 | W08 | 已完成恢复交互与锁/资格保护、管理员导入导出、损坏导入拒绝、密码比较细节、backup/primary 写入故障注入、PBKDF2 后台摘要计算、1,200 单混合态与 10,000 单性能样本 |
+| W10 | 已完成最小发布自动化：Release 构建、9 项 CTest、依赖部署与本机清理 PATH 冒烟；外部干净机器 T23、验收 Word 和截图仍待完成 |
 
 `ServiceBase::pending` 是本轮明确失败的临时接口支撑。将具体方法实现时，应替换该方法内的 pending 调用，不要把 pending 改成 success：若统一改成功会同时破坏多个入口及 Result::error() 前置条件。所有临时接口需按计划返回真实业务结果。
 
@@ -73,6 +74,8 @@
 主工程目录 `TakeoutOrderManagementSystem`；Windows Kit 为 `C:/Qt/6.11.2/mingw_64` + `C:/Qt/Tools/mingw1310_64`，CMake位于 `C:/Qt/Tools/CMake_64/bin`。具体命令见README。测试时 Qt/MinGW bin 必须在当前进程 PATH。
 
 当前 W08 Debug 和 Release 验收目录分别为 `build-w08-debug`、`build-w08-release`，CTest 的 `architecture`、`rules`、`persistence`、`auth`、`catalog`、`orders`、`admin`、`hardening`、`shell_smoke` 共 9 项均已全部通过；测试用 QTemporaryDir，不读写正常用户数据。10,000 单 Release 实测：JSON 9,961,704 bytes，encode 218 ms，decode 162 ms，OrderPolicy 10 ms，save 434 ms，load 233 ms，Query 1 ms，Model 4 ms，Stats <1 ms。`--smoke-test` 用独立临时目录启动并退出。测试可选环境变量 TAKEOUT_SCREENSHOT 输出窗口截图，仅用于 QA；离屏平台缺少中文字形时只核验布局/颜色，Windows 平台再核验实际中文。
+
+W10 可执行 `scripts/package-release.ps1` 生成忽略的 `release-candidate/app`。本机已验证 Release 9/9 CTest、Qt/MinGW 依赖完整性，以及清理 Qt/MinGW PATH 后的打包程序冒烟；这不是另一台无开发环境机器上的 T23 结论。
 
 架构测试覆盖 Result、状态矩阵、事务、认证表单角色约束、Model协议、主题及实例互斥。规则测试覆盖输入、UUID、金额、七状态、时间/history、引用和唯一性。持久化测试覆盖全实体往返、备份恢复报告、严格schema及文件上限。认证测试覆盖 bootstrap 保存失败重试、派生凭据、重复账号、普通入口角色限制、商家+店铺单提交、错误密码/角色/删除状态、四角色 Session 生命周期及重启登录。目录测试覆盖店铺/菜品 CRUD、同店重名、购物车边界、下架拒绝、重启恢复及三个业务 Model 的稳定 ID。订单测试覆盖完整状态流、取消/拒单、重复动作、支付快照变化、骑手隐私字段、角色查询和重启恢复。
 

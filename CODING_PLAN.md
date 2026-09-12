@@ -468,7 +468,7 @@ W04 的 AuthService 执行真正 bootstrap：在 NeedsAdminBootstrap 且当前�
 | W07 | 9/14–9/15，4–6h | W06 | AdminService、AccountModel、AdminPage、StatisticsService、查询统计；汇总核心测试、按第12节执行首次 Release 构建/部署冒烟 | 删除边界、权限、固定样例统计通过；三类注册及管理员 bootstrap、四角色闭环、基础校验/恢复/MVD/Core Qt Test 与 Release 可运行构成 Core 门禁 |
 | W08 | 9/16–9/18，8–11h | W07 Core 门禁 | 完善备份恢复体验及管理员导出/恢复、第二实例处理、损坏 JSON 扩展、backup/primary 写入失败注入、PBKDF2 worker、混合态与 10,000 单性能测试；沿用现有认证数据格式，不新增额外哈希计算；执行完整 P0 功能回归 | T17–T22 强化子项、全部 P0 功能测试及本机 Release 回归通过；Core 不退化；9/18 冻结功能并保留第二版可运行提交；目标机器最终发行验收在 W10 |
 | W09 | 9/19–9/20，3–5h | W08 | 仅有余量才做搜索/留言等一项 P1；否则修缺陷 | 不增加未完成入口；新增字段有持久化/权限测试 |
-| W10 | 9/20–9/22，6–8h | W08/W09 | Release 打包、干净环境验证、README、验收 Word、截图、提交清单 | 9/22 生成候选包，全部交付门禁通过 |
+| W10 | 9/20–9/22，6–8h | W08/W09 | 进行中：已完成 Release 自动打包、README 与本机清理 PATH 冒烟；仍需外部干净机器验证、验收 Word、截图、提交清单 | 9/22 生成候选包，全部交付门禁通过 |
 | W11 | 9/23，2–4h | W10 | 最终校验命名/版本/附件并提交三类材料与仓库 | 截止前提交完成，有文件和远程提交核对记录 |
 
 关键路径 W00→W01→W02→W03→W04→W05→W06→W07→W08→W10→W11。手写版本的具体范围是否被教师认定为一版合格项目应尽早核实；不能等到最后一天用空窗口补标签。AI 可帮助规划、解释、评审与测试设计，但被要求“纯手写”的代码必须由学生真实独立完成。
@@ -529,7 +529,7 @@ W08 Release 实测（Windows 11、Qt 6.11.2、MinGW 13.1、10,000 个单明细 P
 
 ## 12 构建与发布执行模板
 
-命令从当前工程目录执行。以下是实现完成后的操作模板，本次仅核实了工具路径，未运行构建。实施时 CMake 需提供 `BUILD_TESTING`，并注册 `add_test`；启用 Qt Test 的测试可执行文件由 CTest 执行。
+命令从当前工程目录执行。当前可直接运行 `scripts/package-release.ps1` 完成 Release 构建、9 项 CTest、依赖部署和本机清理 PATH 冒烟；以下保留手工操作模板。外部无 Qt 开发环境机器上的 T23 仍需单独执行。
 
 ```powershell
 Set-Location 'C:\Users\JJJPh\Desktop\shcoolfile\programa\QTprojekt\TakeoutOrderManagementSystem'

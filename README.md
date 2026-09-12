@@ -51,6 +51,16 @@ $env:PATH = 'C:/Qt/Tools/mingw1310_64/bin;C:/Qt/6.11.2/mingw_64/bin;' + $env:PAT
 
 默认数据目录由 QStandardPaths::AppDataLocation 解析（组织名 QtTraining，应用名 TakeoutOrderManagementSystem），状态栏显示实际路径。`--data-dir <目录>` 可指定独立目录。`--smoke-test` 自动使用临时目录，短暂打开架构窗口并退出，适合冒烟测试。普通启动不会写业务文件或创建账号，只持有目录锁。
 
+### Release 打包
+
+```powershell
+& '.\scripts\package-release.ps1'
+# 已有候选包时显式替换
+& '.\scripts\package-release.ps1' -Force
+```
+
+脚本会完成 Release 构建、9 项 CTest、`windeployqt`、MinGW 运行库检查，并在只保留 Windows 系统 PATH 的环境中执行打包程序冒烟测试。输出位于 `release-candidate/app`，该目录不提交 Git。本机隔离冒烟已通过，但不能替代 T23 在另一台无 Qt 开发环境机器上的完整四角色验收。
+
 ## 目录
 
 - `core/`：实体、枚举、请求与 Result。
@@ -60,6 +70,7 @@ $env:PATH = 'C:/Qt/Tools/mingw1310_64/bin;C:/Qt/6.11.2/mingw_64/bin;' + $env:PAT
 - `models/`、`delegates/`、`widgets/`：Qt MVD、授权投影模型和管理员数据管理组件。
 - `app/`：依赖组装；`mainwindow.*`：窗口和角色模块导航。
 - `tests/`：架构、规则、持久化、认证、目录购物车、订单闭环、管理员统计契约测试及窗口冒烟。
+- `scripts/`：可重复执行的 Windows Release 打包与本机隔离冒烟脚本。
 - `resources/`：可提交的 .qrc 和样式。
 
 ## 仓库
