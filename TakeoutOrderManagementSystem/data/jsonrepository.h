@@ -1,9 +1,13 @@
 #pragma once
 #include "repository.h"
+#include "atomicfilewriter.h"
+#include <memory>
 namespace takeout {
 class JsonRepository final : public Repository {
 public:
-  explicit JsonRepository(QString path) : m_path(std::move(path)) {}
+  explicit JsonRepository(
+      QString path,
+      std::shared_ptr<const AtomicFileWriter> writer = nullptr);
   Result<StoreSnapshot> load() const override;
   Result<StoreSnapshot> loadBackup() const;
   Result<StoreSnapshot> loadExternal(const QString &path) const;
@@ -17,5 +21,6 @@ private:
   Result<void> writeFile(const QString &path,
                          const StoreSnapshot &snapshot) const;
   QString m_path;
+  std::shared_ptr<const AtomicFileWriter> m_writer;
 };
 } // namespace takeout

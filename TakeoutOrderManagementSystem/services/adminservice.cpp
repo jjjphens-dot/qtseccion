@@ -155,7 +155,10 @@ Result<void> AdminService::importSnapshot(StoreSnapshot snapshot) {
          "accounts"});
 
   snapshot.revision = m_store.snapshot().revision;
-  return commit(std::move(snapshot));
+  const auto committed = commit(std::move(snapshot));
+  if (committed.ok())
+    m_session.clear();
+  return committed;
 }
 
 Result<void> AdminService::importData(const QString &path) {

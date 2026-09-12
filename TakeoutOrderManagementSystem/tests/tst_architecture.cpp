@@ -137,7 +137,8 @@ private slots:
         QCOMPARE(orders.execute("other-id", OrderAction::ConfirmReceipt).error().code, ErrorCode::Forbidden);
         QVERIFY(!query.visibleOrders().ok());
         QVERIFY(!admin.deleteAccount("other-id").ok());
-        QVERIFY(!stats.summary({}).ok());
+        QVERIFY(!stats.roleSummary({}).ok());
+        QCOMPARE(stats.adminSummary({}).error().code, ErrorCode::Forbidden);
         QCOMPARE(repository.writes, 0);
     }
     void emptyAndNonemptyJsonRoundTrip() {

@@ -1,5 +1,8 @@
 #include "appcontext.h"
 #include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include <QDateTime>
 namespace takeout {
 namespace {
 bool hasActiveAdmin(const StoreSnapshot &snapshot) {
@@ -7,6 +10,19 @@ bool hasActiveAdmin(const StoreSnapshot &snapshot) {
         if (account.role == Role::Admin && !account.isDeleted)
             return true;
     return false;
+}
+
+QString corruptCopyPath(const QString &primary) {
+    const QFileInfo info(primary);
+    const auto stamp = QDateTime::currentDateTimeUtc().toString(
+        QStringLiteral("yyyyMMdd_hhmmss_zzz"));
+    const auto base = QDir(info.absolutePath()).filePath(
+        QStringLiteral("%1.corrupt.%2").arg(info.completeBaseName(), stamp));
+    QString candidate = base + QStringLiteral(".json");
+    int suffix = 1;
+    while (QFileInfo::exists(candidate))
+        candidate = base + QStringLiteral(".%1.json").arg(suffix++);
+    return candidate;
 }
 } // namespace
 
@@ -37,6 +53,15 @@ Result<StartupState> AppContext::recoverFromBackup() {
         return Result<StartupState>::failure(
             {ErrorCode::CorruptData, QStringLiteral("备份缺少有效管理员，拒绝恢复"),
              "accounts"});
+    const auto primary = m_paths.dataFile();
+    if (QFileInfo::exists(primary)) {
+        const auto damagedCopy = corruptCopyPath(primary);
+        if (!QFile::copy(primary, damagedCopy))
+            return Result<StartupState>::failure(
+                {ErrorCode::Persistence,
+                 QStringLiteral("无法保留损坏的主数据文件，已取消恢复"),
+                 damagedCopy});
+    }
     const auto restored = m_repository.restoreSnapshot(backup.value());
     if (!restored.ok())
         return Result<StartupState>::failure(restored.error());

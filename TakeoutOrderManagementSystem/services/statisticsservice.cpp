@@ -39,28 +39,19 @@ bool activeMerchant(const StoreSnapshot &snapshot, const Id &merchantId) {
 
 } // namespace
 
-Result<StatisticsSummary>
-StatisticsService::summary(const DateRange &range) const {
+Result<RoleStatistics>
+StatisticsService::roleSummary(const DateRange &range) const {
   const auto permission = requireRole(
       {Role::Customer, Role::Merchant, Role::Rider, Role::Admin});
   if (!permission.ok())
-    return Result<StatisticsSummary>::failure(permission.error());
+    return Result<RoleStatistics>::failure(permission.error());
   const auto checked = validateRange(range);
   if (!checked.ok())
-    return Result<StatisticsSummary>::failure(checked.error());
+    return Result<RoleStatistics>::failure(checked.error());
 
   const auto session = m_session.current();
   const auto snapshot = m_store.snapshot();
-  StatisticsSummary result;
-  for (const auto &account : snapshot.accounts) {
-    if (account.isDeleted)
-      ++result.deletedAccountCount;
-    else
-      ++result.activeAccountCount;
-  }
-  for (const auto &shop : snapshot.shops)
-    if (activeMerchant(snapshot, shop.merchantId))
-      ++result.activeShopCount;
+  RoleStatistics result;
 
   for (const auto &order : snapshot.orders) {
     if (order.status != OrderStatus::Completed || !order.completedAt ||
@@ -90,13 +81,49 @@ StatisticsService::summary(const DateRange &range) const {
     if (!included)
       continue;
     if (result.totalCents > std::numeric_limits<Money>::max() - amount)
-      return Result<StatisticsSummary>::failure(
+      return Result<RoleStatistics>::failure(
           {ErrorCode::Validation, QStringLiteral("统计金额溢出"),
            QStringLiteral("totalCents")});
     ++result.completedCount;
     result.totalCents += amount;
   }
-  return Result<StatisticsSummary>::success(result);
+  return Result<RoleStatistics>::success(result);
+}
+
+Result<AdminStatistics>
+StatisticsService::adminSummary(const DateRange &range) const {
+  const auto permission = requireRole({Role::Admin});
+  if (!permission.ok())
+    return Result<AdminStatistics>::failure(permission.error());
+  const auto checked = validateRange(range);
+  if (!checked.ok())
+    return Result<AdminStatistics>::failure(checked.error());
+
+  const auto snapshot = m_store.snapshot();
+  AdminStatistics result;
+  for (const auto &account : snapshot.accounts) {
+    if (account.isDeleted)
+      ++result.deletedAccountCount;
+    else
+      ++result.activeAccountCount;
+  }
+  for (const auto &shop : snapshot.shops)
+    if (activeMerchant(snapshot, shop.merchantId))
+      ++result.validShopCount;
+
+  for (const auto &order : snapshot.orders) {
+    if (order.status != OrderStatus::Completed || !order.completedAt ||
+        *order.completedAt < range.from || *order.completedAt >= range.until)
+      continue;
+    if (result.totalCents > std::numeric_limits<Money>::max() -
+                                order.totalCents)
+      return Result<AdminStatistics>::failure(
+          {ErrorCode::Validation, QStringLiteral("统计金额溢出"),
+           QStringLiteral("totalCents")});
+    ++result.completedCount;
+    result.totalCents += order.totalCents;
+  }
+  return Result<AdminStatistics>::success(result);
 }
 
 } // namespace takeout

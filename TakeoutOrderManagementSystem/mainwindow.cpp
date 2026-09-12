@@ -8,24 +8,25 @@
 #include "dialogs/registerdialog.h"
 #include "models/cartmodel.h"
 #include "models/accountmodel.h"
+#include "models/accountfilterproxymodel.h"
 #include "models/dishmodel.h"
 #include "models/orderfilterproxymodel.h"
 #include "models/ordertablemodel.h"
 #include "models/shopmodel.h"
 #include "services/catalogservice.h"
 #include "services/orderservice.h"
+#include "widgets/admindatamanagementwidget.h"
 #include <QCheckBox>
 #include <QComboBox>
-#include <QFileDialog>
 #include <QFormLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QInputDialog>
 #include <QLabel>
+#include <QMessageBox>
 #include <QLineEdit>
 #include <QListWidget>
-#include <QMessageBox>
 #include <QPushButton>
 #include <QSet>
 #include <QSizePolicy>
@@ -35,56 +36,7 @@
 #include <QStatusBar>
 #include <QTableView>
 #include <QTimeZone>
-#include <QSortFilterProxyModel>
 #include <QVBoxLayout>
-
-namespace {
-class AccountFilterProxy final : public QSortFilterProxyModel {
-public:
-  explicit AccountFilterProxy(QObject *parent = nullptr)
-      : QSortFilterProxyModel(parent) {}
-  void setKeyword(QString keyword) {
-    beginFilterChange();
-    m_keyword = std::move(keyword);
-    endFilterChange(QSortFilterProxyModel::Direction::Rows);
-  }
-  void setRole(std::optional<takeout::Role> role) {
-    beginFilterChange();
-    m_role = role;
-    endFilterChange(QSortFilterProxyModel::Direction::Rows);
-  }
-
-protected:
-  bool filterAcceptsRow(int sourceRow,
-                        const QModelIndex &sourceParent) const override {
-    const auto *model = sourceModel();
-    if (!model)
-      return false;
-    const auto login = model->index(sourceRow, takeout::AccountModel::LoginName,
-                                    sourceParent)
-                           .data()
-                           .toString();
-    const auto display =
-        model->index(sourceRow, takeout::AccountModel::DisplayName,
-                     sourceParent)
-            .data()
-            .toString();
-    if (!m_keyword.trimmed().isEmpty() &&
-        !login.contains(m_keyword.trimmed(), Qt::CaseInsensitive) &&
-        !display.contains(m_keyword.trimmed(), Qt::CaseInsensitive))
-      return false;
-    if (m_role && model->index(sourceRow, 0, sourceParent)
-                          .data(takeout::AccountModel::RoleRole)
-                          .toInt() != int(*m_role))
-      return false;
-    return true;
-  }
-
-private:
-  QString m_keyword;
-  std::optional<takeout::Role> m_role;
-};
-} // namespace
 
 MainWindow::MainWindow(takeout::AppContext &context,
                        const takeout::Result<takeout::StartupState> &startup,
@@ -110,7 +62,7 @@ MainWindow::MainWindow(takeout::AppContext &context,
       m_loggedOutFiller(new QWidget(this)) {
   using namespace takeout;
   ui->setupUi(this);
-  setWindowTitle(QStringLiteral("外卖订单管理系统 · W08 恢复加固版 0.9.0"));
+  setWindowTitle(QStringLiteral("外卖订单管理系统 · W08 Hardening 0.9.1"));
   resize(1200, 800);
   setMinimumSize(960, 640);
   auto *layout = new QVBoxLayout(ui->centralwidget);
@@ -693,7 +645,7 @@ MainWindow::MainWindow(takeout::AppContext &context,
         body->addLayout(accountFilters);
         auto *accountTable = new QTableView(page);
         accountTable->setObjectName("adminAccountTable");
-        auto *accountProxy = new AccountFilterProxy(page);
+        auto *accountProxy = new AccountFilterProxyModel(page);
         accountProxy->setSourceModel(m_accounts);
         accountTable->setModel(accountProxy);
         accountTable->setSelectionBehavior(QAbstractItemView::SelectRows);
@@ -717,22 +669,7 @@ MainWindow::MainWindow(takeout::AppContext &context,
         body->addWidget(new QLabel(QStringLiteral("平台统计"), page));
         body->addWidget(statistics);
 
-        auto *dataManagement = new QGroupBox(QStringLiteral("数据管理"), page);
-        auto *dataControls = new QHBoxLayout(dataManagement);
-        auto *exportData = new QPushButton(QStringLiteral("导出当前数据"),
-                                            dataManagement);
-        auto *importData = new QPushButton(QStringLiteral("导入数据"),
-                                            dataManagement);
-        auto *restoreBackup = new QPushButton(QStringLiteral("恢复上一份备份"),
-                                               dataManagement);
-        auto *dataMessage = new QLabel(dataManagement);
-        dataMessage->setObjectName("adminDataStatus");
-        dataMessage->setWordWrap(true);
-        dataControls->addWidget(exportData);
-        dataControls->addWidget(importData);
-        dataControls->addWidget(restoreBackup);
-        dataControls->addWidget(dataMessage, 1);
-        body->addWidget(dataManagement);
+        body->addWidget(new AdminDataManagementWidget(m_context.admin(), page));
         connect(accountSearch, &QLineEdit::textChanged, accountProxy,
                 [accountProxy](const QString &text) {
                   accountProxy->setKeyword(text);
@@ -758,50 +695,6 @@ MainWindow::MainWindow(takeout::AppContext &context,
                       result.ok() ? QStringLiteral("账号已删除")
                                    : result.error().message);
                  });
-        connect(exportData, &QPushButton::clicked, this,
-                [this, dataMessage] {
-                  const auto path = QFileDialog::getSaveFileName(
-                      this, QStringLiteral("导出数据"),
-                      QStringLiteral("takeout-export.json"),
-                      QStringLiteral("JSON 文件 (*.json);;所有文件 (*.*)"));
-                  if (path.isEmpty())
-                    return;
-                  const auto result = m_context.admin().exportData(path);
-                  dataMessage->setText(result.ok()
-                                            ? QStringLiteral("数据已原子导出：%1").arg(path)
-                                            : result.error().message);
-                });
-        connect(importData, &QPushButton::clicked, this,
-                [this, dataMessage] {
-                  const auto path = QFileDialog::getOpenFileName(
-                      this, QStringLiteral("导入数据"), {},
-                      QStringLiteral("JSON 文件 (*.json);;所有文件 (*.*)"));
-                  if (path.isEmpty())
-                    return;
-                  if (QMessageBox::warning(
-                          this, QStringLiteral("确认导入"),
-                          QStringLiteral("导入会替换当前业务数据，并把当前有效版本保存在 .bak。继续吗？"),
-                          QMessageBox::Yes | QMessageBox::No,
-                          QMessageBox::No) != QMessageBox::Yes)
-                    return;
-                  const auto result = m_context.admin().importData(path);
-                  dataMessage->setText(result.ok()
-                                            ? QStringLiteral("数据已导入")
-                                            : result.error().message);
-                });
-        connect(restoreBackup, &QPushButton::clicked, this,
-                [this, dataMessage] {
-                  if (QMessageBox::warning(
-                          this, QStringLiteral("确认恢复备份"),
-                          QStringLiteral("将用上一份已验证备份替换当前数据，当前版本会先保存为新的 .bak。继续吗？"),
-                          QMessageBox::Yes | QMessageBox::No,
-                          QMessageBox::No) != QMessageBox::Yes)
-                    return;
-                  const auto result = m_context.admin().restoreBackup();
-                  dataMessage->setText(result.ok()
-                                            ? QStringLiteral("已恢复上一份备份")
-                                            : result.error().message);
-                });
       }
     }
     m_pages->addWidget(page);
@@ -865,9 +758,9 @@ void MainWindow::refreshBusinessModels() {
   const DateRange statisticsRange{
       QDateTime::fromMSecsSinceEpoch(0, QTimeZone::UTC),
       QDateTime::currentDateTimeUtc().addSecs(1)};
-  const auto statistics = m_context.statistics().summary(statisticsRange);
+  const auto statistics = m_context.statistics().roleSummary(statisticsRange);
   const auto statisticsValue =
-      statistics.ok() ? statistics.value() : StatisticsSummary{};
+      statistics.ok() ? statistics.value() : RoleStatistics{};
   auto setStatistics = [this, &statistics](const char *name,
                                            const QString &value) {
     if (auto *label = m_pages->findChild<QLabel *>(name))
@@ -945,16 +838,18 @@ void MainWindow::refreshBusinessModels() {
     const auto accounts = m_context.admin().listAccounts();
     if (accounts.ok())
       m_accounts->replaceProjection(accounts.value());
+    const auto platformStatistics =
+        m_context.statistics().adminSummary(statisticsRange);
     if (auto *label = m_pages->findChild<QLabel *>("adminStatistics")) {
-      if (statistics.ok())
+      if (platformStatistics.ok())
         label->setText(QStringLiteral("已完成订单：%1　平台成交额：%2分\n活跃账号：%3　已删除账号：%4　有效店铺：%5")
-                           .arg(statisticsValue.completedCount)
-                           .arg(statisticsValue.totalCents)
-                           .arg(statisticsValue.activeAccountCount)
-                           .arg(statisticsValue.deletedAccountCount)
-                           .arg(statisticsValue.activeShopCount));
+                           .arg(platformStatistics.value().completedCount)
+                           .arg(platformStatistics.value().totalCents)
+                           .arg(platformStatistics.value().activeAccountCount)
+                           .arg(platformStatistics.value().deletedAccountCount)
+                           .arg(platformStatistics.value().validShopCount));
       else
-        label->setText(statistics.error().message);
+        label->setText(platformStatistics.error().message);
     }
   }
 }

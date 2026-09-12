@@ -37,11 +37,19 @@ struct OrderFilter {
     std::optional<QDateTime> from, until; // UTC half-open [from, until).
 };
 struct DateRange { QDateTime from, until; };
-struct StatisticsSummary {
+struct RoleStatistics {
+    qint64 completedCount = 0;
+    Money totalCents = 0;
+};
+// Platform counts are deliberately isolated from role-visible business
+// statistics and can only be returned by StatisticsService::adminSummary().
+struct AdminStatistics {
     qint64 completedCount = 0;
     Money totalCents = 0;
     qint64 activeAccountCount = 0;
     qint64 deletedAccountCount = 0;
-    qint64 activeShopCount = 0;
+    // A valid shop has an existing, non-deleted merchant. This is not an
+    // "open now" count; shop.isOpen is a separate operational flag.
+    qint64 validShopCount = 0;
 };
 } // namespace takeout

@@ -4,6 +4,7 @@
 namespace takeout {
 class AuthService;
 class CatalogService;
+class AdminService;
 struct Session { Id accountId; Role role; QString displayName; };
 class SessionContext final : public QObject {
     Q_OBJECT
@@ -15,6 +16,7 @@ signals:
 private:
     friend class AuthService;
     friend class CatalogService;
+    friend class AdminService;
     void clear();
     void establish(Session session);
     void updateDisplayName(const QString &displayName);

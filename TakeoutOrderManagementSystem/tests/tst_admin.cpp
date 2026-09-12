@@ -170,32 +170,35 @@ private slots:
     const DateRange range{first.addSecs(-1), first.addSecs(10)};
 
     QVERIFY(auth.login("merchant", "Merchant!1", Role::Merchant).ok());
-    auto result = statistics.summary(range);
+    auto result = statistics.roleSummary(range);
     QVERIFY(result.ok());
     QCOMPARE(result.value().completedCount, qint64(2));
     QCOMPARE(result.value().totalCents, qint64(3000));
     QVERIFY(auth.logout().ok());
 
     QVERIFY(auth.login("rider", "Rider!234", Role::Rider).ok());
-    result = statistics.summary(range);
+    result = statistics.roleSummary(range);
     QVERIFY(result.ok());
     QCOMPARE(result.value().totalCents, qint64(1000));
     QVERIFY(auth.logout().ok());
 
     QVERIFY(auth.login("customer", "Customer!1", Role::Customer).ok());
-    result = statistics.summary(range);
+    result = statistics.roleSummary(range);
     QVERIFY(result.ok());
     QCOMPARE(result.value().totalCents, qint64(4000));
+    QCOMPARE(statistics.adminSummary(range).error().code, ErrorCode::Forbidden);
     QVERIFY(auth.logout().ok());
 
     QVERIFY(auth.login("admin", "Admin!234", Role::Admin).ok());
-    result = statistics.summary(range);
+    result = statistics.roleSummary(range);
     QVERIFY(result.ok());
     QCOMPARE(result.value().totalCents, qint64(4000));
-    QCOMPARE(result.value().activeAccountCount, qint64(5));
-    QCOMPARE(result.value().activeShopCount, qint64(1));
-    QVERIFY(!statistics.summary({QDateTime(), first}).ok());
-    QVERIFY(!statistics.summary({first, first}).ok());
+    const auto adminResult = statistics.adminSummary(range);
+    QVERIFY(adminResult.ok());
+    QCOMPARE(adminResult.value().activeAccountCount, qint64(5));
+    QCOMPARE(adminResult.value().validShopCount, qint64(1));
+    QVERIFY(!statistics.roleSummary({QDateTime(), first}).ok());
+    QVERIFY(!statistics.adminSummary({first, first}).ok());
   }
 
   void nonAdminCannotUseAccountManagement() {

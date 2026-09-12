@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.21)
 
-project(TakeoutOrderManagementSystem VERSION 0.9.0 LANGUAGES CXX)
+project(TakeoutOrderManagementSystem VERSION 0.9.1 LANGUAGES CXX)
 
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTOMOC ON)
@@ -17,7 +17,8 @@ add_library(takeout_core STATIC
     core/enums.h core/entities.h core/result.h core/requests.h
     core/validation.h core/validation.cpp core/credentials.h core/credentials.cpp
     core/orderpolicy.h core/orderpolicy.cpp
-    data/repository.h data/jsoncodec.h data/jsoncodec.cpp
+    data/repository.h data/atomicfilewriter.h data/atomicfilewriter.cpp
+    data/jsoncodec.h data/jsoncodec.cpp
     data/jsonrepository.h data/jsonrepository.cpp
     data/datastore.h data/datastore.cpp data/apppaths.h data/apppaths.cpp
     services/sessioncontext.h services/sessioncontext.cpp
@@ -33,6 +34,7 @@ target_link_libraries(takeout_core PUBLIC Qt6::Core PRIVATE Qt6::Network)
 add_library(takeout_models STATIC
     models/ordertablemodel.h models/ordertablemodel.cpp
     models/accountmodel.h models/accountmodel.cpp
+    models/accountfilterproxymodel.h models/accountfilterproxymodel.cpp
     models/orderfilterproxymodel.h models/orderfilterproxymodel.cpp
     models/shopmodel.h models/shopmodel.cpp
     models/dishmodel.h models/dishmodel.cpp
@@ -48,6 +50,7 @@ add_library(takeout_ui STATIC
     dialogs/registerdialog.h dialogs/registerdialog.cpp
     delegates/moneydelegate.h delegates/moneydelegate.cpp
     delegates/orderstatusdelegate.h delegates/orderstatusdelegate.cpp
+    widgets/admindatamanagementwidget.h widgets/admindatamanagementwidget.cpp
 )
 target_link_libraries(takeout_ui PUBLIC takeout_models Qt6::Widgets)
 

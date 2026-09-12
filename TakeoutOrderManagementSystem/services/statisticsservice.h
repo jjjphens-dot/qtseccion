@@ -5,6 +5,7 @@ namespace takeout {
 class StatisticsService final : public ServiceBase {
 public:
     using ServiceBase::ServiceBase;
-    Result<StatisticsSummary> summary(const DateRange &) const;
+    Result<RoleStatistics> roleSummary(const DateRange &) const;
+    Result<AdminStatistics> adminSummary(const DateRange &) const;
 };
 } // namespace takeout

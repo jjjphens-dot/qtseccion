@@ -5,7 +5,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonDocument>
-#include <QSaveFile>
+#include <memory>
 
 namespace takeout {
 namespace {
@@ -15,11 +15,6 @@ Error corrupt(const QString &field, const QString &detail = {}) {
                            : detail,
           field};
 }
-Error persistence(const QString &path, const QString &detail) {
-  return {ErrorCode::Persistence,
-          QStringLiteral("无法访问数据文件：%1").arg(detail), path};
-}
-
 Result<void> validateWritableSnapshot(const StoreSnapshot &snapshot) {
   if (snapshot.schemaVersion != Limits::SchemaVersion)
     return Result<void>::failure(
@@ -34,20 +29,49 @@ Result<void> validateWritableSnapshot(const StoreSnapshot &snapshot) {
     return valid;
   return Result<void>::success();
 }
+
+QString normalizedComparisonPath(const QString &path) {
+  const auto native = QDir::fromNativeSeparators(path);
+  const QFileInfo absoluteInfo(QDir::cleanPath(QFileInfo(native).absoluteFilePath()));
+  QString normalized;
+  if (absoluteInfo.exists()) {
+    normalized = absoluteInfo.canonicalFilePath();
+  } else {
+    const QFileInfo parentInfo(absoluteInfo.absolutePath());
+    const auto canonicalParent = parentInfo.canonicalFilePath();
+    normalized = canonicalParent.isEmpty()
+                     ? QDir::cleanPath(absoluteInfo.absoluteFilePath())
+                     : QDir(canonicalParent).filePath(absoluteInfo.fileName());
+  }
+  const auto separatorsNormalized = QDir::fromNativeSeparators(normalized);
+#ifdef Q_OS_WIN
+  return separatorsNormalized.toCaseFolded();
+#else
+  return separatorsNormalized;
+#endif
+}
 } // namespace
+
+JsonRepository::JsonRepository(QString path,
+                               std::shared_ptr<const AtomicFileWriter> writer)
+    : m_path(std::move(path)),
+      m_writer(writer ? std::move(writer)
+                      : std::make_shared<QSaveFileWriter>()) {}
 
 Result<StoreSnapshot> JsonRepository::loadFile(const QString &path) const {
   QFile file(path);
   if (!file.open(QIODevice::ReadOnly))
     return Result<StoreSnapshot>::failure(
-        persistence(path, file.errorString()));
+        {ErrorCode::Persistence,
+         QStringLiteral("无法访问数据文件：%1").arg(file.errorString()), path});
   if (file.size() > Limits::MaxFileBytes)
     return Result<StoreSnapshot>::failure(
         corrupt("fileSize", QStringLiteral("数据文件超过 100 MiB 上限")));
   const auto bytes = file.read(Limits::MaxFileBytes + 1);
   if (file.error() != QFileDevice::NoError)
     return Result<StoreSnapshot>::failure(
-        persistence(path, file.errorString()));
+        {ErrorCode::Persistence,
+         QStringLiteral("无法访问数据文件：%1").arg(file.errorString()), path});
   if (bytes.size() > Limits::MaxFileBytes)
     return Result<StoreSnapshot>::failure(
         corrupt("fileSize", QStringLiteral("数据文件超过 100 MiB 上限")));
@@ -110,22 +134,7 @@ Result<void> JsonRepository::writeFile(const QString &path,
   if (bytes.size() > Limits::MaxFileBytes)
     return Result<void>::failure(
         corrupt("fileSize", QStringLiteral("序列化数据超过 100 MiB 上限")));
-  const QFileInfo info(path);
-  if (!QDir().mkpath(info.absolutePath()))
-    return Result<void>::failure(
-        persistence(path, QStringLiteral("无法创建数据目录")));
-  QSaveFile file(path);
-  file.setDirectWriteFallback(false);
-  if (!file.open(QIODevice::WriteOnly))
-    return Result<void>::failure(persistence(path, file.errorString()));
-  if (file.write(bytes) != bytes.size()) {
-    const auto message = file.errorString();
-    file.cancelWriting();
-    return Result<void>::failure(persistence(path, message));
-  }
-  if (!file.commit())
-    return Result<void>::failure(persistence(path, file.errorString()));
-  return Result<void>::success();
+  return m_writer->write(path, bytes);
 }
 
 Result<void> JsonRepository::exportSnapshot(const QString &path,
@@ -133,9 +142,10 @@ Result<void> JsonRepository::exportSnapshot(const QString &path,
   if (path.trimmed().isEmpty())
     return Result<void>::failure(
         {ErrorCode::Validation, QStringLiteral("导出路径不能为空"), "path"});
-  const auto target = QFileInfo(path).absoluteFilePath();
-  const auto primary = QFileInfo(m_path).absoluteFilePath();
-  if (target == primary || target == primary + ".bak")
+  const auto target = normalizedComparisonPath(path);
+  const auto primary = normalizedComparisonPath(m_path);
+  const auto backup = normalizedComparisonPath(m_path + ".bak");
+  if (target == primary || target == backup)
     return Result<void>::failure(
         {ErrorCode::Conflict, QStringLiteral("导出路径不能覆盖应用数据文件"),
          "path"});

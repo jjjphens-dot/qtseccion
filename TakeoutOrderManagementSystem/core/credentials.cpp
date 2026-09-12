@@ -94,11 +94,12 @@ bool verifyPassword(const Account &account, const QString &password) {
 
 bool constantTimeEqual(const QByteArray &left, const QByteArray &right) {
   const auto size = qMax(left.size(), right.size());
-  quint8 difference = static_cast<quint8>(left.size() ^ right.size());
+  quint64 difference = static_cast<quint64>(left.size()) ^
+                       static_cast<quint64>(right.size());
   for (qsizetype i = 0; i < size; ++i) {
     const auto lhs = i < left.size() ? static_cast<quint8>(left.at(i)) : 0;
     const auto rhs = i < right.size() ? static_cast<quint8>(right.at(i)) : 0;
-    difference = static_cast<quint8>(difference | (lhs ^ rhs));
+    difference |= static_cast<quint64>(lhs ^ rhs);
   }
   return difference == 0;
 }

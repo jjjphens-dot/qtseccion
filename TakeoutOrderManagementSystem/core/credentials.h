@@ -13,5 +13,7 @@ Result<Account> createAccount(const StoreSnapshot &snapshot,
                               const RegisterRequest &request);
 Result<void> validateStored(const Account &account);
 bool verifyPassword(const Account &account, const QString &password);
+// Compares all positions up to the longer input without ordinary early exit.
+// This is a fixed-work digest comparison helper, not an absolute timing proof.
 bool constantTimeEqual(const QByteArray &left, const QByteArray &right);
 } // namespace takeout::Credentials

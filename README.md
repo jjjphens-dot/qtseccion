@@ -1,6 +1,6 @@
 # 外卖订单管理系统
 
-C++17 / Qt 6.11.2 Widgets / CMake。当前版本 **0.9.0 W08 恢复加固版（AI 辅助）**，不是完整业务系统，也不是课程纯手写版本。
+C++17 / Qt 6.11.2 Widgets / CMake。当前版本 **0.9.1 W08 Hardening（AI 辅助）**，不是完整业务系统，也不是课程纯手写版本。
 
 ## 当前可运行范围
 
@@ -8,7 +8,7 @@ C++17 / Qt 6.11.2 Widgets / CMake。当前版本 **0.9.0 W08 恢复加固版（A
 - AppContext 组合根；Repository → DataStore → Session → Service 的明确生命周期。
 - DataStore 候选快照事务，只有 Repository 保存成功后才替换内存并发出信号。
 - JsonRepository 完整读写五类业务集合，使用严格 schema、UTC 时间和稳定英文枚举；加载与保存均执行全局不变量校验。
-- QSaveFile 原子替换主文件；第二次及以后保存先验证主文件，并把上一有效版本原子写入 `.bak`。主文件缺失或损坏但备份有效时报告 `RecoveryAvailable`，不自动覆盖。
+- QSaveFile 原子替换主文件；第二次及以后保存先验证主文件，并把上一有效版本原子写入 `.bak`。主文件缺失或损坏但备份有效时报告 `RecoveryAvailable`，不自动覆盖；确认恢复前会保留为 `appdata.corrupt.<timestamp>.json`，留存失败则取消恢复。
 - AppPaths、数据目录 QLockFile、NeedsAdminBootstrap 启动状态；不创建初始管理员或内置账号。
 - 首次启动通过专用入口原子创建管理员；普通入口只注册用户、商家和骑手，管理员不能自助注册。
 - PBKDF2-HMAC-SHA256 使用每账号随机盐和 600,000 次迭代；密码原文不持久化。登录同时核对账号、密码、角色和删除状态，注销立即清除 Session。
@@ -21,16 +21,17 @@ C++17 / Qt 6.11.2 Widgets / CMake。当前版本 **0.9.0 W08 恢复加固版（A
 - OrderQueryService 只返回角色授权的 OrderRow/OrderDetail；骑手未认领前不返回顾客姓名和完整地址，认领后才开放履约所需地址。
 - 订单表使用 OrderTableModel、FilterProxyModel、MoneyDelegate 和 OrderStatusDelegate；顾客、商家、骑手页面分别提供对应动作入口。
 - W07 已接入 AdminService、AccountModel 和管理员页面：账号列表不暴露凭据，支持登录名/显示名搜索、角色筛选和逻辑删除；删除商家会在同一事务中关店、下架菜品并清理所有受影响购物车。
-- StatisticsService 按统一日期半开区间计算顾客消费、商家营业额、骑手收入和平台成交额，并返回活跃/已删除账号与有效店铺计数。
+- StatisticsService 按统一日期半开区间计算角色业务统计；管理员平台统计单独由 `adminSummary()` 提供并受管理员权限保护。有效店铺表示商家账号存在且未删除，不等同于“当前营业”。
 - W08 增加已验证备份的启动恢复确认流程；主文件损坏或缺失时不会静默覆盖，恢复前必须由用户确认。
-- 管理员页面增加当前数据原子导出、严格校验导入和上一份备份恢复；导入要求保留当前有效管理员，失败不会发布内存快照。
-- 密码摘要比较改为固定循环，新增恢复、导入失败和账号保留约束测试。
+- 管理员页面增加当前数据原子导出、严格校验导入和上一份备份恢复；完整备份含认证凭据摘要，界面明确禁止提交 Git、上传公共平台或随意共享；导入/恢复成功后清除 Session，要求重新登录，失败不会发布内存快照。
+- 密码摘要比较改为覆盖较长输入的固定工作循环；导出路径执行规范化、绝对路径、规范大小写比较，避免覆盖主数据或 `.bak`。
+- 写入器保留 QSaveFile 原子提交语义，并提供可注入的写入/备份/主文件失败 seam；硬化测试覆盖恢复矩阵、导入失败保留、路径别名、凭据长度边界和 10,000 单性能基线。
 - 集中 Validation 覆盖账号、密码、Unicode 文本、价格、数量、UUID 等边界；OrderPolicy 可按历史重放校验金额、引用、角色、七状态、支付组合、关键时间、取消/退款与骑手收入。
 - 应用级 Palette 和完整 QSS 明确指定文字、背景、表头、输入、选中、禁用、菜单和状态栏颜色，避免系统深色主题造成白字白底。
 
 ## 尚未实现
 
-系统化写入异常注入、PBKDF2 后台线程优化、10,000 单性能测试和报告仍未完成；报告不在本轮范围。
+PBKDF2 后台线程优化和课程验收报告仍未完成；当前同步 PBKDF2 保持认证正确性，报告不在本轮范围。
 
 实现顺序和关键约束见 [agent.md](agent.md)，详细规划见 [CODING_PLAN.md](CODING_PLAN.md)。计划描述最终目标，不代表所有模块完成。
 
@@ -46,7 +47,7 @@ $env:PATH = 'C:/Qt/6.11.2/mingw_64/bin;C:/Qt/Tools/mingw1310_64/bin;' + $env:PAT
 & './build-w08-debug/TakeoutOrderManagementSystem.exe'
 ```
 
-每个构建命令检查退出码，失败立即停止。Release 将构建目录换为 `build-w08-release`，使用 `-DCMAKE_BUILD_TYPE=Release`；W08 Debug 已验证 9 个 CTest 用例，Release 需使用同一命令替换构建目录并再次执行 CTest。当前验证的是 Windows/Qt 6.11.2/MinGW 13.1，未声称其他 Kit 已验证。
+每个构建命令检查退出码，失败立即停止。当前 Windows/Qt 6.11.2/MinGW 13.1 已独立验证 `build-w08-debug` Debug 和 `build-w08-release` Release，两个目录均为 9/9 CTest 通过；未声称其他 Kit 已验证。
 
 默认数据目录由 QStandardPaths::AppDataLocation 解析（组织名 QtTraining，应用名 TakeoutOrderManagementSystem），状态栏显示实际路径。`--data-dir <目录>` 可指定独立目录。`--smoke-test` 自动使用临时目录，短暂打开架构窗口并退出，适合冒烟测试。普通启动不会写业务文件或创建账号，只持有目录锁。
 
@@ -56,7 +57,7 @@ $env:PATH = 'C:/Qt/6.11.2/mingw_64/bin;C:/Qt/Tools/mingw1310_64/bin;' + $env:PAT
 - `data/`：严格 JSON 编解码、原子存储与备份、DataStore 和路径。
 - `services/`：Session、权限入口与分阶段业务接口。
 - `dialogs/`：登录、首次管理员初始化及三类普通注册表单。
-- `models/`、`delegates/`：Qt MVD。
+- `models/`、`delegates/`、`widgets/`：Qt MVD、授权投影模型和管理员数据管理组件。
 - `app/`：依赖组装；`mainwindow.*`：窗口和角色模块导航。
 - `tests/`：架构、规则、持久化、认证、目录购物车、订单闭环、管理员统计契约测试及窗口冒烟。
 - `resources/`：可提交的 .qrc 和样式。

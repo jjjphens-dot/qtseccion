@@ -104,8 +104,8 @@ private slots:
     QVERIFY(catalog.createMerchantWithShop(merchant).ok());
     QCOMPARE(repository.writes, 4);
     QCOMPARE(store.snapshot().shops.size(), 1);
-    const auto &shop = store.snapshot().shops.first();
-    const auto &merchantAccount = store.snapshot().accounts.last();
+    const auto shop = store.snapshot().shops.first();
+    const auto merchantAccount = store.snapshot().accounts.last();
     QCOMPARE(merchantAccount.role, Role::Merchant);
     QCOMPARE(shop.merchantId, merchantAccount.id);
     QCOMPARE(shop.name, QString("店铺甲"));
