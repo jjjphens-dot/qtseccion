@@ -20,6 +20,7 @@
 #include <QCheckBox>
 #include <QComboBox>
 #include <QFormLayout>
+#include <QGridLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QHeaderView>
@@ -30,6 +31,7 @@
 #include <QListWidget>
 #include <QPushButton>
 #include <QPointer>
+#include <QScrollArea>
 #include <QSet>
 #include <QSizePolicy>
 #include <QSpinBox>
@@ -37,8 +39,10 @@
 #include <QStackedWidget>
 #include <QStatusBar>
 #include <QTableView>
+#include <QTabWidget>
 #include <QTimeZone>
 #include <QVBoxLayout>
+#include <utility>
 
 MainWindow::MainWindow(takeout::AppContext &context,
                        const takeout::Result<takeout::StartupState> &startup,
@@ -148,6 +152,7 @@ MainWindow::MainWindow(takeout::AppContext &context,
       shopTable->setObjectName("customerShopTable");
       shopTable->setModel(m_shops);
       shopTable->setSelectionBehavior(QAbstractItemView::SelectRows);
+      shopTable->setMinimumHeight(120);
       shopTable->setMaximumHeight(150);
       shopTable->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
       body->addWidget(new QLabel(QStringLiteral("营业店铺"), page));
@@ -159,6 +164,7 @@ MainWindow::MainWindow(takeout::AppContext &context,
       dishTable->setItemDelegateForColumn(DishModel::Price,
                                           new MoneyDelegate(dishTable));
       dishTable->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+      dishTable->setMinimumHeight(160);
       body->addWidget(new QLabel(QStringLiteral("可购买菜品"), page));
       body->addWidget(dishTable, 1);
       auto *cartControls = new QHBoxLayout;
@@ -182,6 +188,7 @@ MainWindow::MainWindow(takeout::AppContext &context,
       cartTable->setItemDelegateForColumn(CartModel::LineTotal,
                                           new MoneyDelegate(cartTable));
       cartTable->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+      cartTable->setMinimumHeight(120);
       body->addWidget(new QLabel(QStringLiteral("当前购物车"), page));
       body->addWidget(cartTable, 1);
       auto *orderTable = new QTableView(page);
@@ -195,6 +202,7 @@ MainWindow::MainWindow(takeout::AppContext &context,
       orderTable->setItemDelegateForColumn(
           OrderTableModel::Status, new OrderStatusDelegate(orderTable));
       orderTable->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+      orderTable->setMinimumHeight(180);
       body->addWidget(new QLabel(QStringLiteral("我的订单"), page));
       body->addWidget(orderTable, 1);
       auto *orderDetail = new QLabel(page);
@@ -328,15 +336,29 @@ MainWindow::MainWindow(takeout::AppContext &context,
                     id, OrderAction::ConfirmReceipt));
               });
     } else if (roles.at(i) == Role::Merchant) {
-      auto *profile = new QGroupBox(QStringLiteral("商家资料"), page);
+      auto *merchantSections = new QTabWidget(page);
+      merchantSections->setObjectName("merchantSections");
+      body->addWidget(merchantSections, 1);
+
+      auto *catalogScroll = new QScrollArea(merchantSections);
+      catalogScroll->setObjectName("merchantCatalogScroll");
+      catalogScroll->setWidgetResizable(true);
+      auto *catalogContent = new QWidget(catalogScroll);
+      auto *catalogBody = new QVBoxLayout(catalogContent);
+      catalogScroll->setWidget(catalogContent);
+      merchantSections->addTab(catalogScroll,
+                               QStringLiteral("店铺与菜品"));
+
+      auto *profile = new QGroupBox(QStringLiteral("商家资料"), catalogContent);
       auto *profileForm = new QFormLayout(profile);
       auto *display = new QLineEdit(profile);
       display->setObjectName("merchantDisplayName");
       auto *saveProfile = new QPushButton(QStringLiteral("保存资料"), profile);
       profileForm->addRow(QStringLiteral("显示名"), display);
       profileForm->addRow(saveProfile);
-      body->addWidget(profile);
-      auto *shop = new QGroupBox(QStringLiteral("店铺资料与营业状态"), page);
+      catalogBody->addWidget(profile);
+      auto *shop = new QGroupBox(QStringLiteral("店铺资料与营业状态"),
+                                 catalogContent);
       auto *shopForm = new QFormLayout(shop);
       auto *shopName = new QLineEdit(shop);
       shopName->setObjectName("merchantShopName");
@@ -349,13 +371,16 @@ MainWindow::MainWindow(takeout::AppContext &context,
       auto *saveShop = new QPushButton(QStringLiteral("保存店铺"), shop);
       auto *message = new QLabel(shop);
       message->setObjectName("merchantBusinessStatus");
+      message->setWordWrap(true);
+      message->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
       shopForm->addRow(QStringLiteral("名称"), shopName);
       shopForm->addRow(QStringLiteral("地址"), shopAddress);
       shopForm->addRow(QStringLiteral("简介"), shopDescription);
       shopForm->addRow(shopOpen, saveShop);
       shopForm->addRow(message);
-      body->addWidget(shop);
-      auto *dishFormBox = new QGroupBox(QStringLiteral("菜品管理"), page);
+      catalogBody->addWidget(shop);
+      auto *dishFormBox =
+          new QGroupBox(QStringLiteral("菜品管理"), catalogContent);
       auto *dishForm = new QFormLayout(dishFormBox);
       auto *dishName = new QLineEdit(dishFormBox);
       dishName->setObjectName("merchantDishName");
@@ -366,27 +391,31 @@ MainWindow::MainWindow(takeout::AppContext &context,
       dishAvailable->setObjectName("merchantDishAvailable");
       auto *createDish =
           new QPushButton(QStringLiteral("新增菜品"), dishFormBox);
+      createDish->setObjectName("merchantCreateDish");
       auto *updateDish =
           new QPushButton(QStringLiteral("保存选中菜品"), dishFormBox);
+      updateDish->setObjectName("merchantUpdateDish");
       auto *deleteDish =
           new QPushButton(QStringLiteral("删除选中菜品"), dishFormBox);
+      deleteDish->setObjectName("merchantDeleteDish");
       dishForm->addRow(QStringLiteral("名称"), dishName);
       dishForm->addRow(QStringLiteral("价格（分）"), dishPrice);
       dishForm->addRow(dishAvailable);
-      auto *dishButtons = new QHBoxLayout;
-      dishButtons->addWidget(createDish);
-      dishButtons->addWidget(updateDish);
-      dishButtons->addWidget(deleteDish);
+      auto *dishButtons = new QGridLayout;
+      dishButtons->addWidget(createDish, 0, 0);
+      dishButtons->addWidget(updateDish, 0, 1);
+      dishButtons->addWidget(deleteDish, 1, 0, 1, 2);
       dishForm->addRow(dishButtons);
-      body->addWidget(dishFormBox);
-      auto *dishTable = new QTableView(page);
+      catalogBody->addWidget(dishFormBox);
+      auto *dishTable = new QTableView(catalogContent);
       dishTable->setObjectName("merchantDishTable");
       dishTable->setModel(m_dishes);
       dishTable->setSelectionBehavior(QAbstractItemView::SelectRows);
       dishTable->setItemDelegateForColumn(DishModel::Price,
                                           new MoneyDelegate(dishTable));
       dishTable->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
-      body->addWidget(dishTable, 1);
+      dishTable->setMinimumHeight(180);
+      catalogBody->addWidget(dishTable, 1);
       auto setMessage = [message](const Result<void> &result) {
         message->setText(result.ok() ? QStringLiteral("已保存")
                                      : result.error().message);
@@ -450,7 +479,10 @@ MainWindow::MainWindow(takeout::AppContext &context,
                 setMessage(m_context.catalog().deleteDish(
                     index.data(DishModel::IdRole).toString()));
               });
-      auto *orderTable = new QTableView(page);
+      auto *ordersPage = new QWidget(merchantSections);
+      auto *ordersBody = new QVBoxLayout(ordersPage);
+      merchantSections->addTab(ordersPage, QStringLiteral("订单与统计"));
+      auto *orderTable = new QTableView(ordersPage);
       orderTable->setObjectName("merchantOrderTable");
       auto *orderProxy = new OrderFilterProxyModel(orderTable);
       orderProxy->setSourceModel(m_orders);
@@ -461,15 +493,20 @@ MainWindow::MainWindow(takeout::AppContext &context,
       orderTable->setItemDelegateForColumn(
           OrderTableModel::Status, new OrderStatusDelegate(orderTable));
       orderTable->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
-      body->addWidget(new QLabel(QStringLiteral("本店订单"), page));
-      body->addWidget(orderTable, 1);
-      auto *orderDetail = new QLabel(page);
+      orderTable->setMinimumHeight(180);
+      ordersBody->addWidget(new QLabel(QStringLiteral("本店订单"), ordersPage));
+      ordersBody->addWidget(orderTable, 1);
+      auto *orderDetail = new QLabel(ordersPage);
       orderDetail->setObjectName("merchantOrderDetail");
       orderDetail->setWordWrap(true);
-      body->addWidget(orderDetail);
-      auto *merchantStatistics = new QLabel(page);
+      orderDetail->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+      ordersBody->addWidget(orderDetail);
+      auto *merchantStatistics = new QLabel(ordersPage);
       merchantStatistics->setObjectName("merchantStatistics");
-      body->addWidget(merchantStatistics);
+      merchantStatistics->setWordWrap(true);
+      merchantStatistics->setSizePolicy(QSizePolicy::Ignored,
+                                        QSizePolicy::Preferred);
+      ordersBody->addWidget(merchantStatistics);
       connect(orderTable, &QTableView::clicked, this,
               [this, orderDetail](const QModelIndex &index) {
                 const auto result = m_context.orderQuery().orderDetail(
@@ -485,17 +522,24 @@ MainWindow::MainWindow(takeout::AppContext &context,
                              statusLabel(value.status),
                              QString::number(value.totalCents)));
               });
-      auto *orderControls = new QHBoxLayout;
-      auto *acceptOrder = new QPushButton(QStringLiteral("接单"), page);
-      auto *rejectOrder = new QPushButton(QStringLiteral("拒单"), page);
-      auto *readyOrder = new QPushButton(QStringLiteral("标记出餐"), page);
-      auto *orderMessage = new QLabel(page);
+      auto *orderControls = new QGridLayout;
+      auto *acceptOrder = new QPushButton(QStringLiteral("接单"), ordersPage);
+      acceptOrder->setObjectName("merchantAcceptOrder");
+      auto *rejectOrder = new QPushButton(QStringLiteral("拒单"), ordersPage);
+      rejectOrder->setObjectName("merchantRejectOrder");
+      auto *readyOrder =
+          new QPushButton(QStringLiteral("标记出餐"), ordersPage);
+      readyOrder->setObjectName("merchantReadyOrder");
+      auto *orderMessage = new QLabel(ordersPage);
       orderMessage->setObjectName("merchantOrderStatus");
-      orderControls->addWidget(acceptOrder);
-      orderControls->addWidget(rejectOrder);
-      orderControls->addWidget(readyOrder);
-      orderControls->addWidget(orderMessage, 1);
-      body->addLayout(orderControls);
+      orderMessage->setWordWrap(true);
+      orderMessage->setSizePolicy(QSizePolicy::Ignored,
+                                  QSizePolicy::Preferred);
+      orderControls->addWidget(acceptOrder, 0, 0);
+      orderControls->addWidget(rejectOrder, 0, 1);
+      orderControls->addWidget(readyOrder, 0, 2);
+      orderControls->addWidget(orderMessage, 1, 0, 1, 3);
+      ordersBody->addLayout(orderControls);
       auto selectedOrderId = [orderTable] {
         const auto index = orderTable->currentIndex();
         return index.isValid() ? index.data(OrderTableModel::IdRole).toString()
@@ -700,7 +744,15 @@ MainWindow::MainWindow(takeout::AppContext &context,
                  });
       }
     }
-    m_pages->addWidget(page);
+    if (roles.at(i) == Role::Customer) {
+      auto *scroll = new QScrollArea(m_pages);
+      scroll->setObjectName("customerPageScroll");
+      scroll->setWidgetResizable(true);
+      scroll->setWidget(page);
+      m_pages->addWidget(scroll);
+    } else {
+      m_pages->addWidget(page);
+    }
   }
   m_roleContent->setStretchFactor(1, 1);
   layout->addWidget(m_roleContent, 1);
@@ -948,17 +1000,18 @@ void MainWindow::openLogin() {
   connect(dialog, &LoginDialog::submitted, this, [this, guard] {
     if (!guard || guard->isBusy())
       return;
-    const auto prepared = m_context.auth().beginLogin(
-        guard->loginName(), guard->password(), guard->role());
+    const auto prepared =
+        m_context.auth().beginLogin(guard->loginName(), guard->role());
     if (!prepared.ok()) {
       guard->setError(prepared.error().message);
       return;
     }
     const auto work = prepared.value();
-    const auto passwordUtf8 = guard->password().toUtf8();
+    auto passwordUtf8 = guard->password().toUtf8();
+    guard->clearPassword();
     guard->setBusy(true);
     m_passwordJobs->start(
-        passwordUtf8, work.passwordSalt, work.passwordIterations,
+        std::move(passwordUtf8), work.passwordSalt, work.passwordIterations,
         [this, guard, work](Result<QByteArray> derived) {
           if (!guard)
             return;
@@ -1002,10 +1055,14 @@ void MainWindow::openRegistration() {
         guard->setError(prepared.error().message);
         return;
       }
-      const auto work = prepared.value();
+      auto work = prepared.value();
+      auto passwordUtf8 = work.passwordUtf8;
+      work.passwordUtf8.fill('\0');
+      work.passwordUtf8.clear();
+      guard->clearPassword();
       guard->setBusy(true);
       m_passwordJobs->start(
-          work.passwordUtf8, work.account.passwordSalt,
+          std::move(passwordUtf8), work.account.passwordSalt,
           work.account.passwordIterations,
           [this, guard, work](Result<QByteArray> derived) {
             if (!guard)
@@ -1036,10 +1093,14 @@ void MainWindow::openRegistration() {
         guard->setError(prepared.error().message);
         return;
       }
-      const auto work = prepared.value();
+      auto work = prepared.value();
+      auto passwordUtf8 = work.account.passwordUtf8;
+      work.account.passwordUtf8.fill('\0');
+      work.account.passwordUtf8.clear();
+      guard->clearPassword();
       guard->setBusy(true);
       m_passwordJobs->start(
-          work.account.passwordUtf8, work.account.account.passwordSalt,
+          std::move(passwordUtf8), work.account.account.passwordSalt,
           work.account.account.passwordIterations,
           [this, guard, work](Result<QByteArray> derived) {
             if (!guard)
@@ -1067,10 +1128,14 @@ void MainWindow::openRegistration() {
       guard->setError(prepared.error().message);
       return;
     }
-    const auto work = prepared.value();
+    auto work = prepared.value();
+    auto passwordUtf8 = work.passwordUtf8;
+    work.passwordUtf8.fill('\0');
+    work.passwordUtf8.clear();
+    guard->clearPassword();
     guard->setBusy(true);
     m_passwordJobs->start(
-        work.passwordUtf8, work.account.passwordSalt,
+        std::move(passwordUtf8), work.account.passwordSalt,
         work.account.passwordIterations,
         [this, guard, work](Result<QByteArray> derived) {
           if (!guard)

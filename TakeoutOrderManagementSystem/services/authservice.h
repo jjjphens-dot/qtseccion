@@ -30,7 +30,6 @@ public:
   Result<void> logout();
 
   Result<LoginPasswordWork> beginLogin(const QString &loginName,
-                                       const QString &password,
                                        Role expectedRole) const;
   Result<void> completeLogin(const LoginPasswordWork &work,
                              const QByteArray &passwordHash);

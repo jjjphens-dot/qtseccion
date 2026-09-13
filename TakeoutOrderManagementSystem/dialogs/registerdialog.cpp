@@ -109,11 +109,14 @@ MerchantRegistration RegisterDialog::merchantRequest() const {
           m_displayName->text(),        m_shopName->text(),
           m_description->toPlainText(), m_address->text()};
 }
+void RegisterDialog::clearPassword() {
+  m_password->clear();
+  m_confirmPassword->clear();
+}
 void RegisterDialog::setError(const QString &message) {
   m_error->setText(message);
   m_error->setVisible(true);
-  m_password->clear();
-  m_confirmPassword->clear();
+  clearPassword();
 }
 
 void RegisterDialog::setBusy(bool busy) {

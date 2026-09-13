@@ -466,7 +466,7 @@ W04 的 AuthService 执行真正 bootstrap：在 NeedsAdminBootstrap 且当前�
 | W05 | 9/10–9/11，5–7h | W04 | 扩展 W04 的同一 CatalogService：updateProfile/updateShop/createDish/updateDish/deleteDish、营业状态；Shop/Dish/Cart Models、MoneyDelegate、顾客/商家基础页面；建立 OrderService 的 updateCart 子集，含一用户一车、一车一店、数量/菜品校验与持久化 | 菜品增改删查、资料/营业修改、购物车明确提交后可重启恢复；基础 MVD 可用；不要求订单命令或完整状态机集成 |
 | W06 | 9/11–9/14，10–14h | W05 | 扩展同一 OrderService：createOrder、pay/cancel/accept/reject/markReady/claim/markDelivered/confirmReceipt；接入 OrderQueryService、OrderModel/Filter、OrderStatusDelegate、详情 UI、商家订单动作与骑手页 | 下单→付款→接单→出餐→认领→送达→确认全部落盘；拒单/取消支路通过，历史/claimedAt/支付矩阵一致；无重复 Service |
 | W07 | 9/14–9/15，4–6h | W06 | AdminService、AccountModel、AdminPage、StatisticsService、查询统计；汇总核心测试、按第12节执行首次 Release 构建/部署冒烟 | 删除边界、权限、固定样例统计通过；三类注册及管理员 bootstrap、四角色闭环、基础校验/恢复/MVD/Core Qt Test 与 Release 可运行构成 Core 门禁 |
-| W08 | 9/16–9/18，8–11h | W07 Core 门禁 | 完善备份恢复体验及管理员导出/恢复、第二实例处理、损坏 JSON 扩展、backup/primary 写入失败注入、PBKDF2 worker、混合态与 10,000 单性能测试；沿用现有认证数据格式，不新增额外哈希计算；执行完整 P0 功能回归 | T17–T22 强化子项、全部 P0 功能测试及本机 Release 回归通过；Core 不退化；9/18 冻结功能并保留第二版可运行提交；目标机器最终发行验收在 W10 |
+| W08 | 9/16–9/18，8–11h | W07 Core 门禁 | 已完成备份恢复体验、管理员导出/恢复、第二实例处理、损坏 JSON 扩展、写入失败注入、PBKDF2 worker、性能测试及 Merchant UI 回归修复；沿用现有认证数据格式 | T17–T22 强化子项、全部 P0 功能测试、本机 Release 回归及 960×640 至 1440×900 UI 验收通过；目标机器最终发行验收在 W10 |
 | W09 | 9/19–9/20，3–5h | W08 | 仅有余量才做搜索/留言等一项 P1；否则修缺陷 | 不增加未完成入口；新增字段有持久化/权限测试 |
 | W10 | 9/20–9/22，6–8h | W08/W09 | 进行中：已完成 Release 自动打包、README 与本机清理 PATH 冒烟；仍需外部干净机器验证、验收 Word、截图、提交清单 | 9/22 生成候选包，全部交付门禁通过 |
 | W11 | 9/23，2–4h | W10 | 最终校验命名/版本/附件并提交三类材料与仓库 | 截止前提交完成，有文件和远程提交核对记录 |

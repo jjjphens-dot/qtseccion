@@ -60,6 +60,7 @@ LoginDialog::LoginDialog(QWidget *parent)
 
 QString LoginDialog::loginName() const { return m_loginName->text(); }
 QString LoginDialog::password() const { return m_password->text(); }
+void LoginDialog::clearPassword() { m_password->clear(); }
 Role LoginDialog::role() const { return Role(m_role->currentData().toInt()); }
 void LoginDialog::setError(const QString &message) {
   m_error->setText(message);

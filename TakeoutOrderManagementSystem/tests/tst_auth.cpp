@@ -243,7 +243,7 @@ private slots:
                 .ok());
 
     const auto login =
-        auth.beginLogin("async_customer", "Customer!1", Role::Customer);
+        auth.beginLogin("async_customer", Role::Customer);
     QVERIFY(login.ok());
     QVERIFY(auth.registerAccount(
                          {"revision_bump_2", "Rider!345", "骑手二", {},
@@ -260,7 +260,7 @@ private slots:
     QVERIFY(!session.current());
 
     const auto freshLogin =
-        auth.beginLogin("async_customer", "Customer!1", Role::Customer);
+        auth.beginLogin("async_customer", Role::Customer);
     QVERIFY(freshLogin.ok());
     const auto freshLoginHash = Credentials::derivePbkdf2(
         "Customer!1", freshLogin.value().passwordSalt,

@@ -15,6 +15,7 @@ public:
   explicit LoginDialog(QWidget *parent = nullptr);
   QString loginName() const;
   QString password() const;
+  void clearPassword();
   Role role() const;
   void setError(const QString &message);
   void setBusy(bool busy);

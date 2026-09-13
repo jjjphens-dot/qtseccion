@@ -4,13 +4,17 @@
 #include <QTemporaryDir>
 #include <QFile>
 #include <QComboBox>
+#include <QDir>
 #include <QElapsedTimer>
+#include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
 #include <QPushButton>
+#include <QScrollArea>
 #include <QSplitter>
 #include <QStackedWidget>
 #include <QTableView>
+#include <QTabWidget>
 #include <QTimer>
 #include "app/appcontext.h"
 #include "app/theme.h"
@@ -230,13 +234,24 @@ private slots:
         auto* registration=login.findChild<QPushButton*>("openRegistration");
         QVERIFY(loginRole); QVERIFY(password); QVERIFY(registration);
         QCOMPARE(password->echoMode(),QLineEdit::Password);
+        password->setText("temporary");
+        login.clearPassword();
+        QVERIFY(password->text().isEmpty());
         QCOMPARE(loginRole->count(),4);
         loginRole->setCurrentIndex(3); QVERIFY(!registration->isEnabled());
         RegisterDialog normal(RegisterDialog::Mode::RegisterAccount);
         auto* role=normal.findChild<QComboBox*>("registrationRole");
         auto* address=normal.findChild<QLineEdit*>("registrationAddress");
         auto* shopName=normal.findChild<QLineEdit*>("registrationShopName");
-        QVERIFY(role); QVERIFY(address); QVERIFY(shopName); QCOMPARE(role->count(),3);
+        auto* registrationPassword=normal.findChild<QLineEdit*>("registrationPassword");
+        auto* passwordConfirm=normal.findChild<QLineEdit*>("registrationPasswordConfirm");
+        QVERIFY(role); QVERIFY(address); QVERIFY(shopName); QVERIFY(registrationPassword);
+        QVERIFY(passwordConfirm); QCOMPARE(role->count(),3);
+        registrationPassword->setText("temporary");
+        passwordConfirm->setText("temporary");
+        normal.clearPassword();
+        QVERIFY(registrationPassword->text().isEmpty());
+        QVERIFY(passwordConfirm->text().isEmpty());
         role->setCurrentIndex(1); QVERIFY(!address->isHidden()); QVERIFY(!shopName->isHidden());
         role->setCurrentIndex(2); QVERIFY(address->isHidden()); QVERIFY(shopName->isHidden());
         for(int i=0;i<role->count();++i) QVERIFY(Role(role->itemData(i).toInt())!=Role::Admin);
@@ -343,6 +358,194 @@ private slots:
         AppContext second(AppPaths::resolve(temp.path()));
         QVERIFY(!second.initialize().ok());
         QVERIFY(!QFile::exists(context.paths().dataFile()));
+    }
+    void merchantPageCommonSizeSmoke() {
+        QTemporaryDir temp;
+        QVERIFY(temp.isValid());
+        AppContext context(AppPaths::resolve(temp.path()));
+        QVERIFY(context.initialize().ok());
+        QVERIFY(context.auth().bootstrapAdmin(
+            {"admin", "Admin!234", QStringLiteral("管理员")}).ok());
+        QVERIFY(context.catalog().createMerchantWithShop(
+            {"emptymerchant", "Merchant!2", QStringLiteral("空店商家"),
+             QStringLiteral("空店铺"), QStringLiteral("暂无菜品"),
+             QStringLiteral("测试地址")}).ok());
+        QVERIFY(context.catalog().createMerchantWithShop(
+            {"merchant", "Merchant!1", QStringLiteral("商家甲"),
+             QStringLiteral("测试店铺"),
+             QStringLiteral("用于商家页面布局验收的较长店铺简介，内容应保持可读且不能挤压表格。"),
+             QStringLiteral("南京市测试区长地址一号楼二单元三层")}).ok());
+        QVERIFY(context.auth().login("merchant", "Merchant!1",
+                                     Role::Merchant).ok());
+        QVERIFY(context.catalog().updateShop(
+            {QStringLiteral("测试店铺"),
+             QStringLiteral("用于商家页面布局验收的较长店铺简介，内容应保持可读且不能挤压表格。"),
+             QStringLiteral("南京市测试区长地址一号楼二单元三层"), true}).ok());
+        QVector<Id> dishIds;
+        for (int i = 0; i < 6; ++i) {
+            const auto dish = context.catalog().createDish(
+                {QStringLiteral("测试菜品%1").arg(i + 1), 1000 + i * 100, true});
+            QVERIFY(dish.ok());
+            dishIds.push_back(dish.value());
+        }
+        QVERIFY(context.auth().logout().ok());
+        QVERIFY(context.auth().registerAccount(
+            {"customer", "Customer!1", QStringLiteral("长姓名测试顾客"),
+             QStringLiteral("南京市测试区用于检查长地址换行的街道一百二十三号五栋六单元七层"),
+             Role::Customer}).ok());
+        QVERIFY(context.auth().registerAccount(
+            {"rider", "Rider!123", QStringLiteral("骑手甲"), {},
+             Role::Rider}).ok());
+        QVERIFY(context.auth().login("customer", "Customer!1",
+                                     Role::Customer).ok());
+        Id shopId;
+        for (const auto &shop : context.store().snapshot().shops)
+            if (shop.name == QStringLiteral("测试店铺")) {
+                shopId = shop.id;
+                break;
+            }
+        QVERIFY(!shopId.isEmpty());
+        for (int i = 0; i < 4; ++i) {
+            QVERIFY(context.orders().updateCart(
+                {shopId, {{dishIds.at(i), i + 1}}}).ok());
+            const auto order = context.orders().createOrder({});
+            QVERIFY(order.ok());
+            QVERIFY(context.orders().execute(order.value(),
+                                              OrderAction::Pay).ok());
+        }
+        QVERIFY(context.auth().logout().ok());
+        QVERIFY(context.auth().login("merchant", "Merchant!1",
+                                     Role::Merchant).ok());
+
+        MainWindow window(
+            context, Result<StartupState>::success(StartupState::Ready));
+        auto *navigation = window.findChild<QListWidget *>("roleNavigation");
+        auto *sections = window.findChild<QTabWidget *>("merchantSections");
+        auto *catalogScroll =
+            window.findChild<QScrollArea *>("merchantCatalogScroll");
+        auto *display = window.findChild<QLineEdit *>("merchantDisplayName");
+        auto *shopName = window.findChild<QLineEdit *>("merchantShopName");
+        auto *dishTable = window.findChild<QTableView *>("merchantDishTable");
+        auto *orderTable = window.findChild<QTableView *>("merchantOrderTable");
+        auto *statistics = window.findChild<QLabel *>("merchantStatistics");
+        auto *businessStatus =
+            window.findChild<QLabel *>("merchantBusinessStatus");
+        auto *orderStatus = window.findChild<QLabel *>("merchantOrderStatus");
+        const QStringList actionNames{
+            "merchantCreateDish", "merchantUpdateDish", "merchantDeleteDish",
+            "merchantAcceptOrder", "merchantRejectOrder",
+            "merchantReadyOrder"};
+        QVector<QPushButton *> actions;
+        for (const auto &name : actionNames)
+            actions.push_back(window.findChild<QPushButton *>(name));
+        QVERIFY(navigation);
+        QVERIFY(sections);
+        QVERIFY(catalogScroll);
+        QVERIFY(display);
+        QVERIFY(shopName);
+        QVERIFY(dishTable);
+        QVERIFY(orderTable);
+        QVERIFY(statistics);
+        QVERIFY(businessStatus);
+        QVERIFY(orderStatus);
+        for (auto *action : actions)
+            QVERIFY(action);
+        QCOMPARE(sections->count(), 2);
+        navigation->setCurrentRow(int(Role::Merchant));
+        const auto firstOrder = orderTable->model()->index(0, 0);
+        QVERIFY(firstOrder.isValid());
+        QVERIFY(QMetaObject::invokeMethod(orderTable, "clicked",
+                                          Qt::DirectConnection,
+                                          Q_ARG(QModelIndex, firstOrder)));
+        businessStatus->setText(QStringLiteral(
+            "保存失败：这是一条用于验证长错误信息换行且不撑宽页面的状态消息。"));
+        orderStatus->setText(QStringLiteral(
+            "操作失败：订单状态已经变化，请刷新后重新选择并提交。"));
+
+        const auto outputDirectory =
+            qEnvironmentVariable("MERCHANT_UI_SCREENSHOT_DIR");
+        if (!outputDirectory.isEmpty())
+            QVERIFY(QDir().mkpath(outputDirectory));
+        const QList<QSize> sizes{{960, 640}, {1200, 800}, {1440, 900}};
+        for (const auto &size : sizes) {
+            window.resize(size);
+            window.show();
+            QTest::qWait(50);
+            sections->setCurrentIndex(0);
+            catalogScroll->ensureWidgetVisible(dishTable);
+            QCoreApplication::processEvents();
+            const QRect dishInViewport(
+                dishTable->mapTo(catalogScroll->viewport(), QPoint()),
+                dishTable->size());
+            QVERIFY(dishTable->width() > 200);
+            QVERIFY(dishTable->height() > 100);
+            QVERIFY(dishInViewport.intersects(
+                catalogScroll->viewport()->rect()));
+            for (int i = 0; i < 3; ++i)
+                QVERIFY(actions.at(i)->width() > 0);
+            if (!outputDirectory.isEmpty()) {
+                const auto path = QDir(outputDirectory).filePath(
+                    QStringLiteral("merchant-after-%1x%2-catalog.png")
+                        .arg(size.width()).arg(size.height()));
+                QVERIFY(window.grab().save(path));
+            }
+
+            sections->setCurrentIndex(1);
+            QCoreApplication::processEvents();
+            QVERIFY(orderTable->width() > 200);
+            QVERIFY(orderTable->height() > 100);
+            QVERIFY(statistics->width() > 0);
+            for (int i = 3; i < actions.size(); ++i)
+                QVERIFY(actions.at(i)->width() > 0);
+            qInfo().noquote()
+                << QStringLiteral("MERCHANT-UI %1x%2 dish=%3x%4 order=%5x%6")
+                       .arg(size.width()).arg(size.height())
+                       .arg(dishTable->width()).arg(dishTable->height())
+                       .arg(orderTable->width()).arg(orderTable->height());
+            if (!outputDirectory.isEmpty()) {
+                const auto path = QDir(outputDirectory).filePath(
+                    QStringLiteral("merchant-after-%1x%2-orders.png")
+                        .arg(size.width()).arg(size.height()));
+                QVERIFY(window.grab().save(path));
+            }
+        }
+        for (int width = 960; width <= 1440; width += 40) {
+            const int height = 640 + (width - 960) * 260 / 480;
+            window.resize(width, height);
+            sections->setCurrentIndex(0);
+            catalogScroll->ensureWidgetVisible(dishTable);
+            QCoreApplication::processEvents();
+            QVERIFY(dishTable->height() > 100);
+            sections->setCurrentIndex(1);
+            QCoreApplication::processEvents();
+            QVERIFY(orderTable->height() > 100);
+        }
+
+        if (!outputDirectory.isEmpty()) {
+            window.hide();
+            const auto captureRole = [&](const char *login,
+                                         const char *password, Role role,
+                                         const QString &name) {
+                QVERIFY(context.auth().logout().ok());
+                QVERIFY(context.auth().login(login, password, role).ok());
+                MainWindow roleWindow(
+                    context,
+                    Result<StartupState>::success(StartupState::Ready));
+                roleWindow.resize(960, 640);
+                roleWindow.show();
+                QTest::qWait(50);
+                QVERIFY(roleWindow.grab().save(
+                    QDir(outputDirectory).filePath(name)));
+            };
+            captureRole("customer", "Customer!1", Role::Customer,
+                        QStringLiteral("quick-customer-960x640.png"));
+            captureRole("rider", "Rider!123", Role::Rider,
+                        QStringLiteral("quick-rider-960x640.png"));
+            captureRole("admin", "Admin!234", Role::Admin,
+                        QStringLiteral("quick-admin-960x640.png"));
+            captureRole("emptymerchant", "Merchant!2", Role::Merchant,
+                        QStringLiteral("merchant-empty-960x640.png"));
+        }
     }
 };
 QTEST_MAIN(ArchitectureTest)

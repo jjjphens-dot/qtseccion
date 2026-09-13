@@ -91,9 +91,7 @@ Result<void> AuthService::logout() {
 }
 
 Result<LoginPasswordWork>
-AuthService::beginLogin(const QString &loginName, const QString &password,
-                        Role expectedRole) const {
-  Q_UNUSED(password);
+AuthService::beginLogin(const QString &loginName, Role expectedRole) const {
   if (!m_store.isInitialized() || m_session.current())
     return Result<LoginPasswordWork>::failure(
         {ErrorCode::Conflict,

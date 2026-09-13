@@ -51,6 +51,8 @@
 - 管理员数据管理组件独立于主窗口，显示完整备份敏感性警告并使用 `takeout-full-backup.json` 默认命名；账号过滤代理也移出主窗口。
 - 密码摘要使用覆盖较长输入的固定工作循环；GUI 通过 `PasswordJobCoordinator` 在 QtConcurrent worker 中派生摘要，完成回调重新校验 revision/Session；导出路径执行 Windows 大小写和规范路径保护；`AtomicFileWriter` 支持备份/主文件故障注入测试。
 - `hardening` 测试覆盖恢复矩阵、锁/资格边界、损坏/缺管理员导入、Session 失效、路径别名、backup/primary 写入失败不发布、比较边界、1,200 单混合态样本和 10,000 单性能基线。
+- Merchant 页面已拆为“店铺与菜品 / 订单与统计”两个标签页，前者可滚动、后者保留独立伸缩订单表；Customer 同类小窗口挤压以整页滚动做最小修复。960×640、1200×800、1440×900 和 100%/125%/150% 缩放均完成本机截图验收。
+- GUI 捕获密码后立即清空输入框，注册完成回调不再保留原始密码字节副本；`beginLogin` 已移除未使用的密码参数。PBKDF2 worker、generation guard、revision 与 Session 复核保持不变。
 
 ## 下一轮实施顺序
 

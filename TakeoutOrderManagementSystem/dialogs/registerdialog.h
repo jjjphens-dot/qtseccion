@@ -19,6 +19,7 @@ public:
   AdminBootstrapRequest adminRequest() const;
   RegisterRequest accountRequest() const;
   MerchantRegistration merchantRequest() const;
+  void clearPassword();
   void setError(const QString &message);
   void setBusy(bool busy);
   bool isBusy() const { return m_busy; }
